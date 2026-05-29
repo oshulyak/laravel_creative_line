@@ -1,5 +1,17 @@
-# Lesson 1
-Изучены концепции Models, migrations
+# Lesson 1: Models, migrations
+`php artisan make:model Post -m`
+	creates model in app/Models/Post.php
+	`-m` creates also migration file in /database/migrations
+
+Модели: `/app/Models`
+Миграции: `/database/migrations`
+
+Внутри файлов миграций метод `up` - накатить, `down` - откатить миграцию.
+
+`php ./artisan migrate`
+`php ./artisan migrate:rollback`
+`php artisan migrate:fresh`
+
 ## Homework
 Создать Модели и их Миграции:
 Подобрать наиболее подходящие типы данных для полей.

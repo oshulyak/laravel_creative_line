@@ -9,6 +9,21 @@ class Post extends Model {
 
     public const STATUS_MODERATE = 2;
 
+    /**
+     * Поля, разрешённые для массового присвоения (Post::create / $post->update).
+     *
+     * @var list<string>
+     */
+    protected $fillable = [
+        'author_id',
+        'category_id',
+        'title',
+        'content',
+        'img_path',
+        'status',
+        'published_at',
+    ];
+
     public static function getStatuses(): array {
         return [
             self::STATUS_PUBLISHED => 'Опубликовано',
