@@ -14,7 +14,7 @@ return new class extends Migration {
             $table->id();
             $table->unsignedBigInteger('author_id');
             $table->unsignedBigInteger('category_id')->nullable();
-            $table->string('title')->index();
+            $table->string('title')->unique()->index();
             $table->text('content');
             $table->string('img_path')->nullable();
             $table->unsignedTinyInteger('status')->default(Post::STATUS_PUBLISHED);
