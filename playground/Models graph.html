@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Карта моделей — Line</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --panel-2: #eef1f5;
+    --line: #cdd4de;
+    --text: #161b22;
+    --muted: #5a6573;
+    --accent: #1f6feb;
+    --accent-ink: #ffffff;
+    --identity: #1d4ed8;
+    --people: #9333ea;
+    --content: #0d9488;
+    --engagement: #b45309;
+    --rel-1-1: #7c3aed;
+    --rel-1-n: #1d4ed8;
+    --rel-n-n: #047857;
+    --rel-self: #c2410c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: 1fr auto;
+    height: 100vh;
+  }
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    grid-row: 1 / 3;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 18px 16px 28px;
+  }
+  .sidebar h1 {
+    font-size: 16px;
+    margin: 0 0 2px;
+    letter-spacing: .2px;
+  }
+  .sidebar .sub {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 18px;
+    line-height: 1.45;
+  }
+  .sidebar code { font-family: var(--mono); color: #1f6feb; font-weight: 600; }
+  .group { margin-bottom: 20px; }
+  .group > .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: .12s;
+  }
+  .preset:hover { border-color: var(--accent); }
+  .preset.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 7px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    user-select: none;
+  }
+  .check:hover { background: var(--panel-2); }
+  .check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .line-swatch { width: 22px; height: 0; border-top-width: 3px; border-top-style: solid; flex: none; }
+  .check .meta { margin-left: auto; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
+  /* comments */
+  .comments-list { display: flex; flex-direction: column; gap: 7px; }
+  .comment-item {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--engagement);
+    border-radius: 6px;
+    padding: 8px 9px;
+    font-size: 12px;
+  }
+  .comment-item .ct { color: var(--muted); font-family: var(--mono); font-size: 10.5px; margin-bottom: 3px; display: flex; justify-content: space-between; }
+  .comment-item .del { cursor: pointer; color: var(--muted); }
+  .comment-item .del:hover { color: #f87171; }
+  .empty { font-size: 12px; color: var(--muted); font-style: italic; }
+  /* ---------- Canvas ---------- */
+  .canvas-wrap {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 1px 1px, #d3dae3 1px, transparent 0) 0 0 / 26px 26px,
+      var(--bg);
+  }
+  svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  svg.panning { cursor: grabbing; }
+  .zoom {
+    position: absolute; top: 14px; right: 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .zoom button {
+    width: 34px; height: 34px;
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; cursor: pointer; font-size: 16px;
+  }
+  .zoom button:hover { border-color: var(--accent); }
+  .legend {
+    position: absolute; bottom: 14px; left: 14px;
+    background: rgba(255,255,255,.94);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    backdrop-filter: blur(4px);
+    max-width: 260px;
+    box-shadow: 0 4px 14px rgba(20,30,50,.08);
+  }
+  .legend .lh { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 0 0 6px; }
+  .legend .row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend .row + .lh { margin-top: 9px; }
+  /* nodes */
+  .node { cursor: pointer; }
+  .node rect.card { transition: stroke .12s, opacity .12s, filter .12s; }
+  .node:hover rect.card { stroke: var(--accent); filter: drop-shadow(0 3px 8px rgba(20,30,50,.14)); }
+  .node .title { font-size: 15px; font-weight: 700; fill: var(--text); }
+  .node .tbl { font-size: 10.5px; fill: var(--muted); font-family: var(--mono); }
+  .rel-label { font-size: 10.5px; fill: var(--muted); font-family: var(--mono); }
+  .rel-label-g { cursor: pointer; }
+  .rel-label-g rect { transition: stroke .12s, fill .12s; }
+  .rel-label-g:hover rect { fill: #eef4ff; stroke: var(--accent); }
+  .rel-label-g:hover text { fill: var(--accent); }
+  .badge-txt { font-size: 10.5px; font-weight: 700; font-family: var(--mono); }
+  /* ---------- Prompt ---------- */
+  .prompt-bar {
+    grid-column: 2;
+    grid-row: 2;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    max-height: 32vh;
+    overflow-y: auto;
+  }
+  .prompt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .collapse-btn {
+    display: flex; align-items: center; gap: 7px;
+    background: none; border: none; padding: 2px 0; cursor: pointer;
+  }
+  .collapse-btn .label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .collapse-btn:hover .label { color: var(--text); }
+  .collapse-btn .chev { color: var(--muted); font-size: 12px; transition: transform .15s; }
+  /* collapsed state */
+  .prompt-bar.collapsed { max-height: none; }
+  .prompt-bar.collapsed .prompt-head { margin-bottom: 0; }
+  .prompt-bar.collapsed pre.prompt { display: none; }
+  .prompt-bar.collapsed .collapse-btn .chev { transform: rotate(-90deg); }
+  .copy-btn {
+    background: var(--accent); color: var(--accent-ink); border: none;
+    font-weight: 600; font-size: 12.5px; padding: 7px 16px;
+    border-radius: 7px; cursor: pointer;
+  }
+  .copy-btn:hover { filter: brightness(1.08); }
+  pre.prompt {
+    margin: 0; white-space: pre-wrap; font-family: var(--mono);
+    font-size: 12px; line-height: 1.55; color: #2b3645;
+  }
+  /* ---------- Modal ---------- */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(20,28,40,.42);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; width: 440px; max-width: 92vw; padding: 20px 22px;
+    box-shadow: 0 18px 50px rgba(20,30,50,.25);
+  }
+  .modal h2 { margin: 0 0 2px; font-size: 18px; display: flex; align-items: center; gap: 9px; }
+  .modal .mpath { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  /* Заголовок окна: блок «название + путь» слева, ссылка на исходник — в правом верхнем углу. */
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+  .modal-head-text { min-width: 0; }
+  .modal .frow { display: flex; gap: 8px; font-size: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .pill {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 20px; padding: 3px 11px; font-size: 11.5px; font-family: var(--mono);
+  }
+  .modal .mh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 14px 0 6px; }
+  .modal ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; }
+  .modal ul.fields { columns: 2; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  textarea {
+    width: 100%; min-height: 70px; resize: vertical; margin-top: 4px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--text); font-family: inherit; font-size: 13px; padding: 9px 10px;
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .btn { border-radius: 7px; padding: 8px 16px; font-size: 13px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  /* ---------- Source link inside model modal ---------- */
+  .source-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--accent); text-decoration: none;
+    border: 1px solid var(--line); background: var(--panel-2);
+    padding: 4px 10px; border-radius: 7px; cursor: pointer; flex: none; white-space: nowrap;
+  }
+  .source-link:hover { border-color: var(--accent); }
+  .source-link span { font-family: var(--mono); font-weight: 700; }
+  /* ---------- Code modal (dark) ---------- */
+  .code-modal-bg { z-index: 60; }
+  .code-modal {
+    background: #1b2030; border: 1px solid #2c3344;
+    border-radius: 12px; width: 760px; max-width: 94vw; max-height: 86vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 18px 50px rgba(8,12,20,.45);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 13px 16px; border-bottom: 1px solid #2c3344; background: #161b28;
+  }
+  .code-title { font-family: var(--mono); font-size: 12.5px; color: #b7c0d0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .code-title b { color: #fff; font-weight: 700; }
+  .code-actions { display: flex; gap: 8px; flex: none; }
+  .code-actions .btn { background: #232a3a; border-color: #333c50; color: #d4d9e2; }
+  .code-actions .btn:hover { border-color: var(--accent); }
+  .code-body {
+    margin: 0; padding: 16px 18px; overflow: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+    color: #d4d9e2; tab-size: 4;
+  }
+  .code-body code { font-family: inherit; white-space: pre; }
+  /* PHP syntax tokens */
+  .t-tag   { color: #ff9cac; }
+  .t-com   { color: #6b7689; font-style: italic; }
+  .t-str   { color: #c3e88d; }
+  .t-kw    { color: #c792ea; }
+  .t-cls   { color: #ffcb6b; }
+  .t-const { color: #f78c6c; }
+  .t-var   { color: #82aaff; }
+  .t-num   { color: #f78c6c; }
+  .t-attr  { color: #89ddff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <h1>Карта моделей — Line</h1>
+    <div class="sub">
+      Eloquent-модели проекта, <b>для которых в БД есть записи</b> (PostgreSQL <code>lc_line</code>).
+      Сейчас данные есть у всех 8 моделей. Кликните по сущности, чтобы добавить заметку.
+    </div>
+
+    <div class="group">
+      <div class="label">Пресеты</div>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Слои / группы</div>
+      <div id="layers"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Типы связей</div>
+      <div id="reltypes"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Отображение</div>
+      <div id="options"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Заметки (<span id="comment-count">0</span>)</div>
+      <div class="comments-list" id="comments-list"></div>
+    </div>
+  </aside>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap">
+    <svg id="svg" viewBox="0 0 1100 720" preserveAspectRatio="xMidYMid meet">
+      <defs id="defs"></defs>
+      <g id="viewport">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </g>
+    </svg>
+    <div class="zoom">
+      <button id="zin" title="Приблизить">+</button>
+      <button id="zout" title="Отдалить">−</button>
+      <button id="zreset" title="Сбросить" style="font-size:13px;">⟳</button>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- PROMPT -->
+  <div class="prompt-bar">
+    <div class="prompt-head">
+      <button class="collapse-btn" id="toggle-prompt" title="Свернуть / развернуть промпт" aria-expanded="true">
+        <span class="chev">▾</span><span class="label">Промпт для Claude</span>
+      </button>
+      <button class="copy-btn" id="copy">Скопировать</button>
+    </div>
+    <pre class="prompt" id="prompt"></pre>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-head-text">
+        <h2 id="m-title"></h2>
+        <div class="mpath" id="m-path"></div>
+      </div>
+      <a class="source-link" id="m-source-link"><span>&lt;/&gt;</span> Исходный код</a>
+    </div>
+    <div class="frow" id="m-pills"></div>
+    <div class="mh">Поля</div>
+    <ul class="fields" id="m-fields"></ul>
+    <div class="mh">Связи</div>
+    <ul id="m-rels"></ul>
+    <div class="mh">Заметка для промпта</div>
+    <textarea id="m-note" placeholder="Что обсудить / изменить по этой сущности…"></textarea>
+    <div class="modal-actions">
+      <button class="btn" id="m-cancel">Закрыть</button>
+      <button class="btn primary" id="m-save">Сохранить заметку</button>
+    </div>
+  </div>
+</div>
+
+<!-- CODE MODAL -->
+<div class="modal-bg code-modal-bg" id="code-modal-bg">
+  <div class="code-modal">
+    <div class="code-head">
+      <div class="code-title" id="code-title"></div>
+      <div class="code-actions">
+        <button class="btn" id="code-copy">Скопировать</button>
+        <button class="btn" id="code-close">Закрыть</button>
+      </div>
+    </div>
+    <pre class="code-body"><code id="code-body"></code></pre>
+  </div>
+</div>
+
+<script>
+/* ======================= DATA ======================= */
+const W = 178, H = 74;
+
+const LAYER_META = {
+  identity:   { label: 'Доступ (User, Role)',                color: '#1d4ed8' },
+  people:     { label: 'Люди (Profile)',                     color: '#9333ea' },
+  content:    { label: 'Контент (Post, Category, Tag, Image)', color: '#0d9488' },
+  engagement: { label: 'Активность (Comment)',               color: '#b45309' },
+};
+
+const REL_META = {
+  'one-to-one':  { label: 'Один к одному (1:1)',     color: '#7c3aed', dash: '',      sym: '1—1' },
+  'one-to-many': { label: 'Один ко многим (1:N)',    color: '#1d4ed8', dash: '',      sym: '1—N' },
+  'many-to-many':{ label: 'Многие ко многим (M:N)',  color: '#047857', dash: '7,4',   sym: 'M—N' },
+  'self':        { label: 'Самосвязь',               color: '#c2410c', dash: '2,4',   sym: '↺'   },
+};
+
+const ENTITIES = [
+  { id:'role',     label:'Role',     table:'roles',      model:'app/Models/Role.php',     rows:2, layer:'identity',
+    fields:['id','title','created_at','updated_at'] },
+  { id:'user',     label:'User',     table:'users',      model:'app/Models/User.php',     rows:2, layer:'identity',
+    fields:['id','name','email','phone','password','remember_token'] },
+  { id:'profile',  label:'Profile',  table:'profiles',   model:'app/Models/Profile.php',  rows:2, layer:'people',
+    fields:['id','user_id','nickname','first_name','second_name','img_path','birth_date','gender','city'] },
+  { id:'category', label:'Category', table:'categories', model:'app/Models/Category.php', rows:2, layer:'content',
+    fields:['id','title'] },
+  { id:'tag',      label:'Tag',      table:'tags',       model:'app/Models/Tag.php',      rows:3, layer:'content',
+    fields:['id','title'] },
+  { id:'post',     label:'Post',     table:'posts',      model:'app/Models/Post.php',     rows:2, layer:'content',
+    fields:['id','author_id','category_id','title','content','img_path','status','published_at'] },
+  { id:'image',    label:'Image',    table:'images',     model:'app/Models/Image.php',    rows:1, layer:'content',
+    fields:['id','post_id','img_path'] },
+  { id:'comment',  label:'Comment',  table:'comments',   model:'app/Models/Comment.php',  rows:2, layer:'engagement',
+    fields:['id','post_id','author_id','parent_id','content','status','published_at'] },
+];
+
+// top-left coordinates
+const POS = {
+  role:     { x: 70,  y: 90  },
+  user:     { x: 70,  y: 270 },
+  profile:  { x: 370, y: 270 },
+  category: { x: 370, y: 90  },
+  tag:      { x: 680, y: 80  },
+  post:     { x: 680, y: 280 },
+  image:    { x: 910, y: 150 },
+  comment:  { x: 650, y: 510 },
+};
+
+const RELS = [
+  { id:'user-profile',        from:'user',    to:'profile', type:'one-to-one',   label:'profile',  method:'hasOne / belongsTo (profiles.user_id)', migration:'profiles' },
+  { id:'user-role',           from:'user',    to:'role',    type:'many-to-many', label:'roles',    pivot:'role_user',          pivotRows:3, method:'belongsToMany', migration:'role_user' },
+  { id:'profile-post-author', from:'profile', to:'post',    type:'one-to-many',  label:'author',   method:'hasMany (posts.author_id)',  bend:-46, migration:'posts' },
+  { id:'profile-post-likes',  from:'profile', to:'post',    type:'many-to-many', label:'likes',    pivot:'post_profile_likes', pivotRows:3, method:'belongsToMany', bend:52, migration:'post_profile_likes' },
+  { id:'profile-comment',     from:'profile', to:'comment', type:'one-to-many',  label:'author',   method:'hasMany (comments.author_id)', migration:'comments' },
+  { id:'category-post',       from:'category',to:'post',    type:'one-to-many',  label:'posts',    method:'hasMany', migration:'posts' },
+  { id:'post-comment',        from:'post',    to:'comment', type:'one-to-many',  label:'comments', method:'hasMany (comments.post_id)', migration:'comments' },
+  { id:'post-image',          from:'post',    to:'image',   type:'one-to-many',  label:'images',   method:'hasMany', migration:'images' },
+  { id:'post-tag',            from:'post',    to:'tag',     type:'many-to-many', label:'tags',     pivot:'post_tag',           pivotRows:3, method:'belongsToMany', migration:'post_tag' },
+  { id:'comment-self',        from:'comment', to:'comment', type:'self',         label:'replies',  method:'parent_id → replies', migration:'comments' },
+];
+
+/* ======================= MODEL SOURCES =======================
+   Исходники моделей встроены в playground как строки: файл открывается
+   как статический file://, без PHP-сервера, поэтому fetch с диска недоступен.
+   При изменении моделей этот блок нужно обновлять вручную.
+   Актуально на момент: 4 урок (Eloquent Relationships).             */
+const SOURCES = {
+  role: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
+
+class Role extends Model {
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'title',
+    ];
+
+    /**
+     * Пользователи с этой ролью (многие ко многим через role_user).
+     */
+    public function users(): BelongsToMany {
+        return $this->belongsToMany(User::class)->withTimestamps();
+    }
+}
+`,
+  user: `<?php
+
+namespace App\\Models;
+
+// use Illuminate\\Contracts\\Auth\\MustVerifyEmail;
+use Database\\Factories\\UserFactory;
+use Illuminate\\Database\\Eloquent\\Attributes\\Fillable;
+use Illuminate\\Database\\Eloquent\\Attributes\\Hidden;
+use Illuminate\\Database\\Eloquent\\Factories\\HasFactory;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
+use Illuminate\\Database\\Eloquent\\Relations\\HasOne;
+use Illuminate\\Foundation\\Auth\\User as Authenticatable;
+use Illuminate\\Notifications\\Notifiable;
+
+#[Fillable(['name', 'email', 'phone', 'password'])]
+#[Hidden(['password', 'remember_token'])]
+class User extends Authenticatable {
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, Notifiable;
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
+
+    /**
+     * Профиль пользователя (один к одному).
+     */
+    public function profile(): HasOne {
+        return $this->hasOne(Profile::class);
+    }
+
+    /**
+     * Роли пользователя (многие ко многим через pivot role_user).
+     */
+    public function roles(): BelongsToMany {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+}
+`,
+  profile: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
+use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+class Profile extends Model {
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'user_id',
+        'nickname',
+        'first_name',
+        'second_name',
+        'img_path',
+        'birth_date',
+        'gender',
+        'city',
+    ];
+
+    /**
+     * Пользователь, которому принадлежит профиль (обратная сторона hasOne).
+     */
+    public function user(): BelongsTo {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Публикации, написанные этим профилем (внешний ключ posts.author_id).
+     */
+    public function posts(): HasMany {
+        return $this->hasMany(Post::class, 'author_id');
+    }
+
+    /**
+     * Комментарии, оставленные этим профилем (внешний ключ comments.author_id).
+     */
+    public function comments(): HasMany {
+        return $this->hasMany(Comment::class, 'author_id');
+    }
+
+    /**
+     * Публикации, которые лайкнул профиль (многие ко многим через post_profile_likes).
+     */
+    public function likedPosts(): BelongsToMany {
+        return $this->belongsToMany(Post::class, 'post_profile_likes', 'profile_id', 'post_id')->withTimestamps();
+    }
+}
+`,
+  category: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+class Category extends Model {
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'title',
+    ];
+
+    /**
+     * Публикации этой категории.
+     */
+    public function posts(): HasMany {
+        return $this->hasMany(Post::class);
+    }
+}
+`,
+  tag: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
+
+class Tag extends Model {
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'title',
+    ];
+
+    /**
+     * Публикации с этим тегом (многие ко многим через post_tag).
+     */
+    public function posts(): BelongsToMany {
+        return $this->belongsToMany(Post::class)->withTimestamps();
+    }
+}
+`,
+  post: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany;
+use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+class Post extends Model {
+    public const STATUS_PUBLISHED = 1;
+
+    public const STATUS_MODERATE = 2;
+
+    /**
+     * Поля, разрешённые для массового присвоения (Post::create / $post->update).
+     *
+     * @var list<string>
+     */
+    protected $fillable = [
+        'author_id',
+        'category_id',
+        'title',
+        'content',
+        'img_path',
+        'status',
+        'published_at',
+    ];
+
+    public static function getStatuses(): array {
+        return [
+            self::STATUS_PUBLISHED => 'Опубликовано',
+            self::STATUS_MODERATE => 'На модерации',
+        ];
+    }
+
+    /**
+     * Автор публикации — профиль (внешний ключ posts.author_id).
+     */
+    public function author(): BelongsTo {
+        return $this->belongsTo(Profile::class, 'author_id');
+    }
+
+    /**
+     * Категория публикации.
+     */
+    public function category(): BelongsTo {
+        return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Комментарии к публикации.
+     */
+    public function comments(): HasMany {
+        return $this->hasMany(Comment::class);
+    }
+
+    /**
+     * Изображения публикации (внешний ключ images.post_id).
+     */
+    public function images(): HasMany {
+        return $this->hasMany(Image::class);
+    }
+
+    /**
+     * Теги публикации (многие ко многим через post_tag).
+     */
+    public function tags(): BelongsToMany {
+        return $this->belongsToMany(Tag::class)->withTimestamps();
+    }
+
+    /**
+     * Профили, лайкнувшие публикацию (многие ко многим через post_profile_likes).
+     */
+    public function likedByProfiles(): BelongsToMany {
+        return $this->belongsToMany(Profile::class, 'post_profile_likes', 'post_id', 'profile_id')->withTimestamps();
+    }
+}
+`,
+  image: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
+
+class Image extends Model {
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'post_id',
+        'img_path',
+    ];
+
+    /**
+     * Публикация, которой принадлежит изображение.
+     */
+    public function post(): BelongsTo {
+        return $this->belongsTo(Post::class);
+    }
+}
+`,
+  comment: `<?php
+
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;
+use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+class Comment extends Model {
+    public const STATUS_PUBLISHED = 'published';
+
+    public const STATUS_MODERATE = 'moderate';
+
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'post_id',
+        'author_id',
+        'parent_id',
+        'content',
+        'status',
+        'published_at',
+    ];
+
+    public static function getStatuses(): array {
+        return [
+            self::STATUS_PUBLISHED => 'Опубликовано',
+            self::STATUS_MODERATE => 'На модерации',
+        ];
+    }
+
+    /**
+     * Публикация, к которой относится комментарий.
+     */
+    public function post(): BelongsTo {
+        return $this->belongsTo(Post::class);
+    }
+
+    /**
+     * Автор комментария — профиль (внешний ключ comments.author_id).
+     */
+    public function author(): BelongsTo {
+        return $this->belongsTo(Profile::class, 'author_id');
+    }
+
+    /**
+     * Родительский комментарий (самосвязь для дерева ответов).
+     */
+    public function parent(): BelongsTo {
+        return $this->belongsTo(Comment::class, 'parent_id');
+    }
+
+    /**
+     * Дочерние комментарии — ответы (самосвязь).
+     */
+    public function replies(): HasMany {
+        return $this->hasMany(Comment::class, 'parent_id');
+    }
+}
+`,
+};
+
+/* ======================= MIGRATION SOURCES =======================
+   Код миграций, создающих внешние ключи и pivot-таблицы для связей.
+   Встроен по той же причине, что и модели (статический file://, без сервера).
+   Одна миграция может относиться к нескольким связям (например, posts держит
+   и author_id, и category_id). При изменениях обновлять вручную.            */
+const MIGRATIONS = {
+  profiles: {
+    file: 'database/migrations/2026_05_28_041003_create_profiles_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('profiles', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->index()->constrained('users');
+            $table->string('nickname')->unique();
+            $table->string('first_name')->nullable();
+            $table->string('second_name')->nullable();
+            $table->string('img_path')->nullable();
+            $table->date('birth_date')->nullable();
+            $table->string('gender')->nullable();
+            $table->string('city')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('profiles');
+    }
+};
+`,
+  },
+  posts: {
+    file: 'database/migrations/2026_05_28_041004_create_posts_table.php',
+    code: `<?php
+
+use App\\Models\\Post;
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('author_id')->index()->constrained('profiles');
+            $table->foreignId('category_id')->nullable()->index()->constrained('categories');
+            $table->string('title')->unique()->index();
+            $table->text('content');
+            $table->string('img_path')->nullable();
+            $table->unsignedTinyInteger('status')->default(Post::STATUS_PUBLISHED);
+            $table->timestamp('published_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('posts');
+    }
+};
+`,
+  },
+  comments: {
+    file: 'database/migrations/2026_05_28_041005_create_comments_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('comments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('post_id')->index()->constrained('posts');
+            $table->foreignId('author_id')->index()->constrained('profiles');
+            $table->foreignId('parent_id')->nullable()->index()->constrained('comments');
+            $table->text('content');
+            $table->string('status');
+            $table->timestamp('published_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('comments');
+    }
+};
+`,
+  },
+  images: {
+    file: 'database/migrations/2026_05_28_041007_create_images_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('images', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('post_id')->index()->constrained('posts');
+            $table->string('img_path');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('images');
+    }
+};
+`,
+  },
+  post_tag: {
+    file: 'database/migrations/2026_05_28_041008_create_post_tag_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('post_tag', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('post_id')->index()->constrained('posts');
+            $table->foreignId('tag_id')->index()->constrained('tags');
+            $table->unique(['post_id', 'tag_id']);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('post_tag');
+    }
+};
+`,
+  },
+  post_profile_likes: {
+    file: 'database/migrations/2026_05_28_041009_create_post_profile_likes_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('post_profile_likes', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('profile_id')->index()->constrained('profiles');
+            $table->foreignId('post_id')->index()->constrained('posts');
+            $table->unique(['profile_id', 'post_id']);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('post_profile_likes');
+    }
+};
+`,
+  },
+  role_user: {
+    file: 'database/migrations/2026_05_28_041010_create_role_user_table.php',
+    code: `<?php
+
+use Illuminate\\Database\\Migrations\\Migration;
+use Illuminate\\Database\\Schema\\Blueprint;
+use Illuminate\\Support\\Facades\\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void {
+        Schema::create('role_user', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('role_id')->index()->constrained('roles');
+            $table->foreignId('user_id')->index()->constrained('users');
+            $table->unique(['role_id', 'user_id']);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void {
+        Schema::dropIfExists('role_user');
+    }
+};
+`,
+  },
+};
+
+/* ======================= STATE ======================= */
+const DEFAULTS = {
+  layers: { identity:true, people:true, content:true, engagement:true },
+  rels:   { 'one-to-one':true, 'one-to-many':true, 'many-to-many':true, 'self':true },
+  showCounts: true, showLabels: true, showPivots: true,
+};
+const state = {
+  layers: { ...DEFAULTS.layers },
+  rels:   { ...DEFAULTS.rels },
+  showCounts: true, showLabels: true, showPivots: true,
+  hover: null,           // entityId под курсором — для подсветки связей
+  zoom: 1, panX: 0, panY: 0,
+  comments: {},          // entityId -> note text
+  activeModal: null,
+  codeContent: '',       // сырой код, показанный в тёмном окне (для кнопки «Скопировать»)
+  preset: 'full',
+};
+
+const PRESETS = {
+  full:     { name:'Полная схема',          layers:{identity:1,people:1,content:1,engagement:1}, rels:{'one-to-one':1,'one-to-many':1,'many-to-many':1,'self':1} },
+  content:  { name:'Контент и публикации',  layers:{identity:0,people:1,content:1,engagement:1}, rels:{'one-to-one':1,'one-to-many':1,'many-to-many':1,'self':1} },
+  access:   { name:'Пользователи и доступ', layers:{identity:1,people:1,content:0,engagement:0}, rels:{'one-to-one':1,'one-to-many':1,'many-to-many':1,'self':1} },
+  manymany: { name:'Только связи M:N',      layers:{identity:1,people:1,content:1,engagement:1}, rels:{'one-to-one':0,'one-to-many':0,'many-to-many':1,'self':0} },
+};
+
+const byId = id => ENTITIES.find(e => e.id === id);
+
+/* ======================= BUILD CONTROLS ======================= */
+const $ = sel => document.querySelector(sel);
+
+function buildPresets() {
+  const wrap = $('#presets');
+  wrap.innerHTML = '';
+  Object.entries(PRESETS).forEach(([key, p]) => {
+    const b = document.createElement('button');
+    b.className = 'preset' + (state.preset === key ? ' active' : '');
+    b.textContent = p.name;
+    b.onclick = () => applyPreset(key);
+    wrap.appendChild(b);
+  });
+}
+
+function applyPreset(key) {
+  const p = PRESETS[key];
+  Object.keys(state.layers).forEach(k => state.layers[k] = !!p.layers[k]);
+  Object.keys(state.rels).forEach(k => state.rels[k] = !!p.rels[k]);
+  state.preset = key;
+  buildPresets(); buildLayers(); buildRelTypes();
+  updateAll();
+}
+
+function markCustomPreset() { state.preset = null; buildPresets(); }
+
+function buildLayers() {
+  const wrap = $('#layers');
+  wrap.innerHTML = '';
+  Object.entries(LAYER_META).forEach(([key, m]) => {
+    const count = ENTITIES.filter(e => e.layer === key).length;
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    lab.innerHTML = `<input type="checkbox" ${state.layers[key] ? 'checked':''}>
+      <span class="swatch" style="background:${m.color}"></span>
+      <span>${m.label}</span><span class="meta">${count}</span>`;
+    lab.querySelector('input').onchange = e => { state.layers[key] = e.target.checked; markCustomPreset(); updateAll(); };
+    wrap.appendChild(lab);
+  });
+}
+
+function buildRelTypes() {
+  const wrap = $('#reltypes');
+  wrap.innerHTML = '';
+  Object.entries(REL_META).forEach(([key, m]) => {
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    lab.innerHTML = `<input type="checkbox" ${state.rels[key] ? 'checked':''}>
+      <span class="line-swatch" style="border-top-color:${m.color}; ${m.dash ? 'border-top-style:dashed;':''}"></span>
+      <span>${m.label}</span>`;
+    lab.querySelector('input').onchange = e => { state.rels[key] = e.target.checked; markCustomPreset(); updateAll(); };
+    wrap.appendChild(lab);
+  });
+}
+
+function buildOptions() {
+  const opts = [
+    ['showCounts', 'Показывать число записей'],
+    ['showLabels', 'Показывать подписи связей'],
+    ['showPivots', 'Показывать pivot-таблицы'],
+  ];
+  const wrap = $('#options');
+  wrap.innerHTML = '';
+  opts.forEach(([key, label]) => {
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    lab.innerHTML = `<input type="checkbox" ${state[key] ? 'checked':''}><span>${label}</span>`;
+    lab.querySelector('input').onchange = e => { state[key] = e.target.checked; updateAll(); };
+    wrap.appendChild(lab);
+  });
+}
+
+function buildLegend() {
+  const el = $('#legend');
+  let html = '<p class="lh">Типы связей</p>';
+  Object.values(REL_META).forEach(m => {
+    html += `<div class="row"><span class="line-swatch" style="border-top-color:${m.color}; ${m.dash?'border-top-style:dashed;':''}"></span>${m.sym} &nbsp;${m.label.split(' (')[0]}</div>`;
+  });
+  html += '<p class="lh">Группы сущностей</p>';
+  Object.values(LAYER_META).forEach(m => {
+    html += `<div class="row"><span class="swatch" style="background:${m.color}"></span>${m.label}</div>`;
+  });
+  el.innerHTML = html;
+}
+
+function buildDefs() {
+  let d = '';
+  Object.entries(REL_META).forEach(([key, m]) => {
+    const safe = key.replace(/[^a-z]/g, '');
+    d += `<marker id="arr-${safe}" markerWidth="9" markerHeight="9" refX="7.5" refY="3"
+            orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L8,3 L0,6 Z" fill="${m.color}"/></marker>`;
+  });
+  $('#defs').innerHTML = d;
+}
+
+/* ======================= GEOMETRY ======================= */
+function center(id) { const p = POS[id]; return { x: p.x + W/2, y: p.y + H/2 }; }
+
+function borderPoint(id, tx, ty) {
+  const c = center(id);
+  let dx = tx - c.x, dy = ty - c.y;
+  if (dx === 0 && dy === 0) return c;
+  const hw = W/2, hh = H/2;
+  const scale = 1 / Math.max(Math.abs(dx)/hw, Math.abs(dy)/hh);
+  return { x: c.x + dx*scale, y: c.y + dy*scale };
+}
+
+/* ======================= RENDER ======================= */
+function entityVisible(id) { return state.layers[byId(id).layer]; }
+function relVisible(r) {
+  return state.rels[r.type] && entityVisible(r.from) && entityVisible(r.to);
+}
+
+/* Что подсветить при наведении: сама сущность, её связи и соседи. Иначе — null (всё видно). */
+function currentEmphasis() {
+  if (!state.hover || !entityVisible(state.hover)) { return null; }
+  const nodes = new Set([state.hover]);
+  const edges = new Set();
+  RELS.forEach((r, i) => {
+    if (!relVisible(r)) { return; }
+    if (r.from === state.hover || r.to === state.hover) {
+      edges.add(i); nodes.add(r.from); nodes.add(r.to);
+    }
+  });
+  return { nodes, edges };
+}
+
+function renderEdges(emph) {
+  const g = $('#edges');
+  let out = '';
+  RELS.forEach((r, i) => {
+    if (!relVisible(r)) return;
+    const m = REL_META[r.type];
+    const safe = r.type.replace(/[^a-z]/g, '');
+    const op = emph ? (emph.edges.has(i) ? 1 : 0.16) : 1;
+    if (r.type === 'self') {
+      const p = POS[r.from];
+      const sx = p.x + W*0.58, sy = p.y;
+      const ex = p.x + W*0.82, ey = p.y;
+      const path = `M ${sx} ${sy} C ${sx-6} ${sy-78}, ${ex+58} ${ey-78}, ${ex} ${ey}`;
+      out += `<path d="${path}" fill="none" stroke="${m.color}" stroke-width="2"
+                stroke-dasharray="${m.dash}" marker-end="url(#arr-${safe})" style="opacity:${op}"/>`;
+      if (state.showLabels) out += relLabel((sx+ex)/2 + 14, sy - 64, r, op);
+      return;
+    }
+    const ca = center(r.from), cb = center(r.to);
+    const mx = (ca.x+cb.x)/2, my = (ca.y+cb.y)/2;
+    let ddx = cb.x-ca.x, ddy = cb.y-ca.y;
+    const len = Math.hypot(ddx, ddy) || 1;
+    const px = -ddy/len, py = ddx/len;
+    const bend = r.bend || 0;
+    const ctrl = { x: mx + px*bend, y: my + py*bend };
+    const p1 = borderPoint(r.from, ctrl.x, ctrl.y);
+    const p2 = borderPoint(r.to, ctrl.x, ctrl.y);
+    const path = `M ${p1.x} ${p1.y} Q ${ctrl.x} ${ctrl.y} ${p2.x} ${p2.y}`;
+    const startMarker = r.type === 'many-to-many' ? `marker-start="url(#arr-${safe})"` : '';
+    out += `<path d="${path}" fill="none" stroke="${m.color}" stroke-width="2"
+              stroke-dasharray="${m.dash}" marker-end="url(#arr-${safe})" ${startMarker} style="opacity:${op}"/>`;
+    if (state.showLabels) {
+      // label near the control/mid point of the curve
+      const lx = 0.25*p1.x + 0.5*ctrl.x + 0.25*p2.x;
+      const ly = 0.25*p1.y + 0.5*ctrl.y + 0.25*p2.y;
+      out += relLabel(lx, ly, r, op);
+    }
+  });
+  g.innerHTML = out;
+  // Клик по лейблу связи открывает миграцию этой связи в тёмном окне.
+  g.querySelectorAll('.rel-label-g').forEach(el => {
+    el.onclick = () => openMigrationModal(el.dataset.rel);
+  });
+}
+
+function relLabel(x, y, r, op) {
+  let txt = r.label;
+  if (state.showPivots && r.pivot) {
+    txt += '  ·  ' + r.pivot + (state.showCounts ? ` (${r.pivotRows})` : '');
+  }
+  const w = txt.length * 6.4 + 12;
+  return `<g class="rel-label-g" data-rel="${r.id}" style="opacity:${op}">
+    <rect x="${x - w/2}" y="${y - 9}" width="${w}" height="18" rx="5"
+          fill="#ffffff" stroke="${REL_META[r.type].color}55"/>
+    <text class="rel-label" x="${x}" y="${y + 3.5}" text-anchor="middle">${txt}</text>
+  </g>`;
+}
+
+function renderNodes(emph) {
+  const g = $('#nodes');
+  let out = '';
+  ENTITIES.forEach(e => {
+    if (!entityVisible(e.id)) return;
+    const p = POS[e.id];
+    const color = LAYER_META[e.layer].color;
+    const op = emph ? (emph.nodes.has(e.id) ? 1 : 0.18) : 1;
+    const hasNote = !!state.comments[e.id];
+    const stroke = hasNote ? '#d97706' : '#cdd4de';
+    const strokeW = hasNote ? 2.4 : 1.4;
+    out += `<g class="node" data-id="${e.id}" style="opacity:${op}">
+      <rect class="card" x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="11"
+            fill="#ffffff" stroke="${stroke}" stroke-width="${strokeW}"/>
+      <rect x="${p.x}" y="${p.y}" width="6" height="${H}" rx="3" fill="${color}"/>
+      <text class="title" x="${p.x + 18}" y="${p.y + 30}">${e.label}</text>
+      <text class="tbl" x="${p.x + 18}" y="${p.y + 50}">${e.table}</text>`;
+    if (state.showCounts) {
+      const bw = 56;
+      out += `<rect x="${p.x + W - bw - 12}" y="${p.y + 13}" width="${bw}" height="20" rx="10"
+                fill="${color}22" stroke="${color}66"/>
+              <text class="badge-txt" x="${p.x + W - bw/2 - 12}" y="${p.y + 27}"
+                text-anchor="middle" fill="${color}">${e.rows} зап.</text>`;
+    }
+    if (hasNote) {
+      out += `<circle cx="${p.x + W - 14}" cy="${p.y + H - 14}" r="5" fill="#d97706"/>`;
+    }
+    out += `</g>`;
+  });
+  g.innerHTML = out;
+  g.querySelectorAll('.node').forEach(n => {
+    const id = n.dataset.id;
+    n.onclick = () => openModal(id);
+    n.onmouseenter = () => { state.hover = id; renderGraph(); };
+    n.onmouseleave = () => { state.hover = null; renderGraph(); };
+  });
+}
+
+function renderGraph() {
+  const emph = currentEmphasis();
+  renderEdges(emph);
+  renderNodes(emph);
+}
+
+function applyTransform() {
+  $('#viewport').setAttribute('transform',
+    `translate(${state.panX} ${state.panY}) scale(${state.zoom})`);
+}
+
+/* ======================= PROMPT ======================= */
+function updatePrompt() {
+  const visEnts = ENTITIES.filter(e => entityVisible(e.id));
+  const visRels = RELS.filter(relVisible);
+
+  const lines = [];
+  lines.push('Это карта Eloquent-моделей учебного проекта Line (Laravel 13 + PostgreSQL, база lc_line).');
+  lines.push('Показаны модели, для которых в базе есть записи (на момент построения данные есть у всех 8 моделей).');
+  lines.push('');
+
+  // scoping note only if filtered from defaults
+  const layersFiltered = Object.keys(state.layers).some(k => state.layers[k] !== DEFAULTS.layers[k]);
+  const relsFiltered = Object.keys(state.rels).some(k => state.rels[k] !== DEFAULTS.rels[k]);
+  if (layersFiltered) {
+    const shown = Object.entries(state.layers).filter(([,v]) => v).map(([k]) => LAYER_META[k].label.split(' (')[0]);
+    lines.push('Фокус на группах: ' + shown.join(', ') + '.');
+  }
+  if (relsFiltered) {
+    const shown = Object.entries(state.rels).filter(([,v]) => v).map(([k]) => REL_META[k].label.split(' (')[0]);
+    lines.push('Показаны типы связей: ' + shown.join(', ') + '.');
+  }
+  if (layersFiltered || relsFiltered) lines.push('');
+
+  lines.push('Сущности' + (state.showCounts ? ' и число записей' : '') + ':');
+  visEnts.forEach(e => {
+    lines.push(`- ${e.label} (${e.table}` + (state.showCounts ? `, ${e.rows} зап.` : '') + ')');
+  });
+  lines.push('');
+
+  lines.push('Связи между сущностями:');
+  visRels.forEach(r => {
+    const m = REL_META[r.type];
+    const a = byId(r.from).label, b = byId(r.to).label;
+    let line = `- ${a} ${m.sym} ${b} — ${m.method}`;
+    if (r.pivot) line += `, pivot ${r.pivot}` + (state.showCounts ? ` (${r.pivotRows} зап.)` : '');
+    lines.push(line);
+  });
+
+  const noted = visEnts.filter(e => state.comments[e.id]);
+  if (noted.length) {
+    lines.push('');
+    lines.push('Заметки по сущностям:');
+    noted.forEach(e => {
+      lines.push(`- ${e.label}: ${state.comments[e.id]}`);
+    });
+    lines.push('');
+    lines.push('Учти заметки выше при дальнейшей работе со схемой и моделями.');
+  }
+
+  $('#prompt').textContent = lines.join('\n');
+}
+
+/* ======================= COMMENTS LIST ======================= */
+function renderComments() {
+  const list = $('#comments-list');
+  const entries = Object.entries(state.comments);
+  $('#comment-count').textContent = entries.length;
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty">Пока нет заметок. Кликните по сущности на схеме.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  entries.forEach(([id, txt]) => {
+    const e = byId(id);
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.innerHTML = `<div class="ct"><span>${e.label}</span><span class="del" title="Удалить">✕</span></div>${txt}`;
+    item.querySelector('.del').onclick = () => { delete state.comments[id]; updateAll(); };
+    list.appendChild(item);
+  });
+}
+
+/* ======================= MODAL ======================= */
+function openModal(id) {
+  const e = byId(id);
+  state.activeModal = id;
+  $('#m-title').innerHTML = `<span class="swatch" style="width:14px;height:14px;background:${LAYER_META[e.layer].color}"></span>${e.label}`;
+  $('#m-path').textContent = e.model;
+  $('#m-pills').innerHTML =
+    `<span class="pill">таблица: ${e.table}</span>
+     <span class="pill">записей: ${e.rows}</span>
+     <span class="pill">полей: ${e.fields.length}</span>`;
+  $('#m-fields').innerHTML = e.fields.map(f => `<li>${f}</li>`).join('');
+  const rels = RELS.filter(r => r.from === id || r.to === id);
+  $('#m-rels').innerHTML = rels.map(r => {
+    const other = r.from === id ? byId(r.to).label : byId(r.from).label;
+    const dir = r.from === id ? '→' : '←';
+    return `<li><b>${REL_META[r.type].sym}</b> ${dir} ${other} <span style="color:var(--muted)">(${r.method})</span></li>`;
+  }).join('') || '<li style="color:var(--muted)">нет связей</li>';
+  $('#m-note').value = state.comments[id] || '';
+  $('#modal-bg').classList.add('open');
+  $('#m-note').focus();
+}
+function closeModal() { $('#modal-bg').classList.remove('open'); state.activeModal = null; }
+function saveModal() {
+  const id = state.activeModal;
+  const val = $('#m-note').value.trim();
+  if (val) state.comments[id] = val; else delete state.comments[id];
+  closeModal();
+  updateAll();
+}
+
+/* ======================= CODE MODAL (исходник модели) ======================= */
+/* Минимальная подсветка синтаксиса PHP без внешних библиотек.
+   Один проход по строке мастер-регуляркой: каждый символ попадает ровно в один
+   токен, поэтому ключевые слова внутри строк/комментариев не подсвечиваются. */
+const PHP_KEYWORDS = new Set([
+  'abstract','and','array','as','break','callable','case','catch','class','clone',
+  'const','continue','declare','default','do','echo','else','elseif','empty','enum',
+  'extends','final','finally','fn','for','foreach','function','global','goto','if',
+  'implements','include','include_once','instanceof','insteadof','interface','isset',
+  'list','match','namespace','new','or','print','private','protected','public',
+  'readonly','require','require_once','return','static','switch','throw','trait','try',
+  'unset','use','var','while','xor','yield','true','false','null','int','float',
+  'string','bool','void','self','parent','iterable','object','mixed','never',
+]);
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function highlightPhp(code) {
+  const re = /(<\?php|\?>)|(\/\*[\s\S]*?\*\/|\/\/[^\n]*|#(?!\[)[^\n]*)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(#\[)|(\$[A-Za-z_]\w*)|(\d+\.?\d*)|([A-Za-z_]\w*)/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(code))) {
+    out += escapeHtml(code.slice(last, m.index));
+    last = re.lastIndex;
+    const [, tag, comment, str, attr, variable, num, word] = m;
+    // обращение к методу/свойству через ->: имя не подсвечиваем как ключевое слово
+    const member = m.index >= 2 && code.slice(m.index - 2, m.index) === '->';
+    if (tag) {
+      out += `<span class="t-tag">${escapeHtml(tag)}</span>`;
+    } else if (comment) {
+      out += `<span class="t-com">${escapeHtml(comment)}</span>`;
+    } else if (str) {
+      out += `<span class="t-str">${escapeHtml(str)}</span>`;
+    } else if (attr) {
+      out += `<span class="t-attr">${escapeHtml(attr)}</span>`;
+    } else if (variable) {
+      out += `<span class="t-var">${escapeHtml(variable)}</span>`;
+    } else if (num) {
+      out += `<span class="t-num">${escapeHtml(num)}</span>`;
+    } else if (word) {
+      if (!member && PHP_KEYWORDS.has(word)) {
+        out += `<span class="t-kw">${escapeHtml(word)}</span>`;
+      } else if (!member && /^[A-Z][A-Z0-9_]*$/.test(word)) {
+        out += `<span class="t-const">${escapeHtml(word)}</span>`;
+      } else if (!member && /^[A-Z]/.test(word)) {
+        out += `<span class="t-cls">${escapeHtml(word)}</span>`;
+      } else {
+        out += escapeHtml(word);
+      }
+    }
+  }
+  out += escapeHtml(code.slice(last));
+  return out;
+}
+
+/* Показ кода в тёмном окне: titleHtml — заголовок (HTML), code — сырой PHP. */
+function showCode(titleHtml, code) {
+  state.codeContent = code || '';
+  $('#code-title').innerHTML = titleHtml;
+  $('#code-body').innerHTML = code ? highlightPhp(code) : 'Код недоступен.';
+  $('#code-modal-bg').classList.add('open');
+}
+
+/* Исходник модели (ссылка «Исходный код» в окне сущности). */
+function openCodeModal(id) {
+  const e = byId(id);
+  showCode(`<b>${e.label}</b> &nbsp;·&nbsp; ${e.model}`, SOURCES[id]);
+}
+
+/* Миграция связи (клик по лейблу на линии). */
+function openMigrationModal(relId) {
+  const r = RELS.find(x => x.id === relId);
+  if (!r) { return; }
+  const mig = MIGRATIONS[r.migration];
+  const a = byId(r.from).label, b = byId(r.to).label;
+  const title = `<b>${a} ${REL_META[r.type].sym} ${b}</b> &nbsp;·&nbsp; ${mig ? mig.file : 'миграция не найдена'}`;
+  showCode(title, mig ? mig.code : null);
+}
+
+function closeCodeModal() { $('#code-modal-bg').classList.remove('open'); }
+
+/* ======================= ZOOM & PAN ======================= */
+function setZoom(z) { state.zoom = Math.max(0.5, Math.min(2.4, z)); applyTransform(); }
+$('#zin').onclick = () => setZoom(state.zoom * 1.18);
+$('#zout').onclick = () => setZoom(state.zoom / 1.18);
+$('#zreset').onclick = () => { state.zoom = 1; state.panX = 0; state.panY = 0; applyTransform(); };
+
+(function enablePan() {
+  const svg = $('#svg');
+  let dragging = false, moved = false, onEmpty = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  svg.addEventListener('mousedown', ev => {
+    onEmpty = !ev.target.closest('.node') && !ev.target.closest('.rel-label-g');
+    if (!onEmpty) return;
+    dragging = true; moved = false; sx = ev.clientX; sy = ev.clientY; ox = state.panX; oy = state.panY;
+    svg.classList.add('panning');
+  });
+  window.addEventListener('mousemove', ev => {
+    if (!dragging) return;
+    if (Math.abs(ev.clientX - sx) > 3 || Math.abs(ev.clientY - sy) > 3) { moved = true; }
+    const k = (svg.viewBox.baseVal.width) / svg.clientWidth || 1;
+    state.panX = ox + (ev.clientX - sx) * k;
+    state.panY = oy + (ev.clientY - sy) * k;
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    // чистый клик по пустому месту (без перетаскивания) — снять подсветку от наведения
+    if (dragging && onEmpty && !moved && state.hover) { state.hover = null; renderGraph(); }
+    dragging = false; svg.classList.remove('panning');
+  });
+  svg.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    setZoom(state.zoom * (ev.deltaY < 0 ? 1.08 : 0.93));
+  }, { passive: false });
+})();
+
+/* ======================= COLLAPSE PROMPT ======================= */
+$('#toggle-prompt').onclick = () => {
+  const bar = document.querySelector('.prompt-bar');
+  const collapsed = bar.classList.toggle('collapsed');
+  $('#toggle-prompt').setAttribute('aria-expanded', String(!collapsed));
+};
+
+/* ======================= COPY ======================= */
+$('#copy').onclick = () => {
+  navigator.clipboard.writeText($('#prompt').textContent).then(() => {
+    const b = $('#copy'); const t = b.textContent;
+    b.textContent = 'Скопировано ✓';
+    setTimeout(() => b.textContent = t, 1300);
+  });
+};
+
+/* ======================= WIRE-UP ======================= */
+$('#m-cancel').onclick = closeModal;
+$('#m-save').onclick = saveModal;
+$('#modal-bg').onclick = ev => { if (ev.target.id === 'modal-bg') closeModal(); };
+
+// Ссылка «Исходный код» в окне модели открывает второе (тёмное) окно поверх.
+$('#m-source-link').onclick = () => { if (state.activeModal) openCodeModal(state.activeModal); };
+$('#code-close').onclick = closeCodeModal;
+$('#code-modal-bg').onclick = ev => { if (ev.target.id === 'code-modal-bg') closeCodeModal(); };
+$('#code-copy').onclick = () => {
+  navigator.clipboard.writeText(state.codeContent || '').then(() => {
+    const b = $('#code-copy'); const t = b.textContent;
+    b.textContent = 'Скопировано ✓';
+    setTimeout(() => b.textContent = t, 1300);
+  });
+};
+
+// Escape закрывает сначала верхнее окно с кодом, затем окно модели.
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  if ($('#code-modal-bg').classList.contains('open')) { closeCodeModal(); }
+  else { closeModal(); }
+});
+
+function updateAll() {
+  renderGraph();
+  renderComments();
+  updatePrompt();
+}
+
+buildDefs();
+buildPresets();
+buildLayers();
+buildRelTypes();
+buildOptions();
+buildLegend();
+applyTransform();
+updateAll();
+</script>
+</body>
+</html>
