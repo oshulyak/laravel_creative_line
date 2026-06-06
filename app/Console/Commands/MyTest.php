@@ -12,17 +12,28 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('my:test')]
+#[Signature('my:test {action=show : Действие: create — создать данные, show — показать связи через dd (по умолчанию)}')]
 #[Description('Создаёт тестовые данные и демонстрирует связи моделей (урок 4).')]
 class MyTest extends Command {
     /**
      * Execute the console command.
      *
-     * Команда наполняет базу тестовыми данными «вручную» через create()/attach()
-     * и в конце выводит связанные данные через dd(). Рассчитана на чистую базу
-     * (запускать после `php artisan migrate:fresh`).
+     * По аргументу команды выбираем действие: create — наполнить базу тестовыми
+     * данными, show — вывести связанные данные через dd().
      */
     public function handle(): void {
+        match ($this->argument('action')) {
+            'create' => $this->create(),
+            'show' => $this->show(),
+            default => $this->error('Неизвестное действие. Допустимо: create или show.'),
+        };
+    }
+
+    /**
+     * Наполняет базу тестовыми данными «вручную» через create()/attach().
+     * Рассчитана на чистую базу (запускать после `php artisan migrate:fresh`).
+     */
+    private function create(): void {
         // 1. Роли (для связи многие-ко-многим с пользователями).
         $adminRole = Role::create(['title' => 'admin']);
         $userRole = Role::create(['title' => 'user']);
@@ -113,7 +124,17 @@ class MyTest extends Command {
             'published_at' => now(),
         ]);
 
-        $this->info('Тестовые данные созданы. Ниже — демонстрация связей.');
+        $this->info('Тестовые данные созданы. Запустите `my:test show` для демонстрации связей.');
+    }
+
+    /**
+     * Выводит связанные данные через dd(). Нужные записи достаём из БД по
+     * известным значениям, созданным в create().
+     */
+    private function show(): void {
+        $alice = User::where('email', 'alice@example.com')->firstOrFail();
+        $firstPost = Post::where('title', 'Знакомство с Eloquent')->firstOrFail();
+        $secondPost = Post::where('title', 'Релиз новой версии')->firstOrFail();
 
         // Демонстрация связей через dd() с жадной загрузкой (eager loading),
         // чтобы избежать проблемы N+1 при обращении к отношениям.
