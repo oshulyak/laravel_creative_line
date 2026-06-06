@@ -9,16 +9,11 @@ return new class extends Migration {
      * Run the migrations.
      */
     public function up(): void {
-        Schema::create('profiles', function (Blueprint $table) {
+        Schema::create('role_user', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('role_id')->index()->constrained('roles');
             $table->foreignId('user_id')->index()->constrained('users');
-            $table->string('nickname')->unique();
-            $table->string('first_name')->nullable();
-            $table->string('second_name')->nullable();
-            $table->string('img_path')->nullable();
-            $table->date('birth_date')->nullable();
-            $table->string('gender')->nullable();
-            $table->string('city')->nullable();
+            $table->unique(['role_id', 'user_id']);
             $table->timestamps();
         });
     }
@@ -27,6 +22,6 @@ return new class extends Migration {
      * Reverse the migrations.
      */
     public function down(): void {
-        Schema::dropIfExists('profiles');
+        Schema::dropIfExists('role_user');
     }
 };

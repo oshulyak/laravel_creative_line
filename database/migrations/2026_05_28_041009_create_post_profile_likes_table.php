@@ -9,9 +9,11 @@ return new class extends Migration {
      * Run the migrations.
      */
     public function up(): void {
-        Schema::create('images', function (Blueprint $table) {
+        Schema::create('post_profile_likes', function (Blueprint $table) {
             $table->id();
-            $table->string('img_path');
+            $table->foreignId('profile_id')->index()->constrained('profiles');
+            $table->foreignId('post_id')->index()->constrained('posts');
+            $table->unique(['profile_id', 'post_id']);
             $table->timestamps();
         });
     }
@@ -20,6 +22,6 @@ return new class extends Migration {
      * Reverse the migrations.
      */
     public function down(): void {
-        Schema::dropIfExists('images');
+        Schema::dropIfExists('post_profile_likes');
     }
 };
