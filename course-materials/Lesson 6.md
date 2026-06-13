@@ -1,96 +1,65 @@
-# Lesson 6 Morph Relationships
+# Lesson 6 - Soft Delete, Relations Through, Casts
 
-`php artisan make:model Image -m`:
-IN Image.php:
+## Soft Delete
+IN migrations: 
 ```php
-    public function imageable(): MorphTo {
-        return $this->morphTo();
-    }
+$table->softDeletes(); // adds `deleted_at` field (timestamp)
 ```
 
-IN Comment.php :
 ```php
-  public function commentable(): MorphTo {
-        return $this->morphTo();
-    }
+use SoftDeletes; // // adds a global scope that auto-excludes soft-deleted rows (WHERE deleted_at IS NULL)
+
+$model->delete(); // soft deletes
+Model::withTrashed(); Model::onlyTrashed(); // Get deleted
+$model->restore(); // restore
+$model->forceDelete(); // delete record from DB
 ```
 
-IN `images_table`:
-```php
-    public function up(): void {
-        Schema::create('images', function (Blueprint $table) {
-            $table->id();
-            $table->string('img_path');
-            $table->morphs('imageable');
-            $table->timestamps();
-        });
-    }
-```
 
-IN `comments_table`:
+## Relations Through
+IN Category.php:
 ```php
-            $table->morphs('commentable');
-            // $table->foreignId('post_id')->index()->constrained('posts');
-```
-
-`php artisan make:migration create_likeables_table`:
-```php
-    public function up(): void {
-        Schema::create('likeables', function (Blueprint $table) {
-            $table->id();
-            $table->morphs('likeable');
-            $table->foreignId('profile_id')->index()->constrained('profiles');
-            $table->timestamps();
-            $table->unique(['profile_id', 'likeable_type', 'likeable_id']);
-        });
-    }
-```
-
-IN Post.php :
-```php
-    public function image(): MorphOne {
-        return $this->morphOne(Image::class, 'imageable');
+    public function comments(): HasManyThrough {
+        return $this->hasManyThrough(Comment::class, Post::class); // Вытаскиваем комеенты постов определённой категории
     }  
 
-    public function comments(): MorphMany {
-        return $this->morphMany(Comment::class, 'commentable');
-    } 
-
-    public function likedByProfiles(): MorphToMany {
-        return $this->morphToMany(Profile::class, 'likeable');
+    public function comment(): HasOneThrough {
+        return $this->hasOneThrough(Comment::class, Post::class); // Случайный комент (в данном случае смысла нет)
     }
 ```
 
-IN Profile.php :
+Eager loading:
 ```php
-    public function likedPosts(): MorphToMany {
-        return $this->morphedByMany(Post::class, 'likeable');
-    }  
+	$comment->post->category; // lazy load
+	
+	Comment::with('post.category')->get(); // Eager load all comments with categories	
 
-    public function likedComments(): MorphToMany {
-        return $this->morphedByMany(Comment::class, 'likeable');
-    }  
-
-    public function image(): MorphOne {
-        return $this->morphOne(Image::class, 'imageable');
-    }
+	$comments->load('post.category'); // add categories to loaded comments collection	
 ```
 
 
 
-*Post*: morphOne ↔ *Image*: morphTo
-*Post*: morphMany ↔ *Comment*: morphTo
-*Post*: morphToMany (Likes) ↔  *Profiles*: morphedByMany
-
-===
-morphOne, morphMany 	↔ 	morphTo
-morphToMany		        ↔	morphedByMany
+## Casts
+Сonvert raw database values into specific PHP data types—and vice versa—when reading from or writing to DB.
+IN User.php
+```php
+    protected function casts(): array {
+        return [
+            'email_verified_at' => 'datetime',Ctrl + Shift + V
+            'password' => 'hashed',
+        ];
+    }
+```
 
 ## Homework
-Create Morph Relationships:
-- Make Post and Profile Imageable (Post - one to many, Profile - one to one)
-- Make Post and Comment Commentable
-- Make Post and Comment Likeable
-- Make Post and Comment Tagable
+1. Find Models for which Relations Through are applicable
+2. Create Relations Through
 
-Change seeders accordingly.
+### Created Relations Through
+
+| Родитель (метод) | Через | Цель | Смысл | Ключи |
+|---|---|---|---|---|
+| `Category::comments()` | Post | Comment | комментарии ко всем постам категории | по умолчанию (`category_id`, `post_id`) |
+| `User::posts()` | Profile | Post | посты пользователя (через профиль) | свои: `user_id`, `author_id` |
+| `User::comments()` | Profile | Comment | комментарии пользователя (через профиль) | свои: `user_id`, `author_id` |
+| `Profile::postComments()` | Post | Comment | комментарии к постам профиля | свои: `author_id`, `post_id` |
