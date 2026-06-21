@@ -1,58 +1,86 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Line — учебная социальная сеть на Laravel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+**Это учебный проект по курсу Laravel.** Его цель — не коммерческая разработка, а последовательное и глубокое освоение Laravel на примере классической социальной сети: проектирование, архитектура и практическая разработка современного приложения.
 
-## About Laravel
+Проект развивается вместе с курсом: код пишется аккуратно, в стиле Laravel-way, а каждое существенное решение (связи моделей, миграции, валидация, политики, события, очереди, тесты) сопровождается объяснением, *почему* выбран именно такой подход.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> ⚠️ Репозиторий носит образовательный характер. Это не готовый продукт, а тренировочная площадка для изучения фреймворка.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Автор курса
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- 📱 Telegram: [@laravelcreativetg](https://t.me/laravelcreativetg)
+- ▶️ YouTube: [@laravelcreative](https://www.youtube.com/@laravelcreative)
 
-## Learning Laravel
+## Стек
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **Backend:** Laravel (PHP)
+- **База данных:** PostgreSQL
+- **Frontend:** Vue (интеграция с Laravel через Inertia, запросы через Axios)
+- **Тесты:** PHPUnit
+- **Формат кода:** Laravel Pint
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Предметная область
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+Приложение моделирует социальную сеть: пользователи и профили, публикации, категории, комментарии, лайки, теги, роли, подписки, группы, темы, чаты и сообщения. Набор моделей и их атрибутов расширяется по мере прохождения курса.
 
-## Agentic Development
+## Программа курса
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Темы, которые изучаются в курсе и реализуются в этом проекте.
 
-```bash
-composer require laravel/boost --dev
+### Laravel
 
-php artisan boost:install
-```
+**Основы и CRUD**
+- Маршруты (Route), контроллеры (Controller), сервисы (Service)
+- Модели и миграции, базовый CRUD
+- Form Request и валидация
+- Pagination, фильтрация (Filtering), Mapper
+- Artisan-команды (Command)
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+**Eloquent: отношения**
+- Один к одному, один ко многим, многие ко многим
+- Отношения с выборкой
+- «Через» (`hasOneThrough` / `hasManyThrough`), в том числе инверсия
+- Полиморфные: один к одному, один ко многим, многие ко многим
 
-## Contributing
+**Работа с данными**
+- Редактирование таблиц, Soft Delete
+- Getter / Cast / Scope
+- Factory и Seeder
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+**События и фоновая обработка**
+- Event и Listener, Observers
+- Queue и Jobs
 
-## Code of Conduct
+**Аутентификация и доступ**
+- Laravel Breeze
+- Middleware, Config, Cache
+- Policy, роли (Roles)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+**API**
+- RESTful-маршруты, API Resource, REST API
+- JWT-токены, Filter Template
+- Тестирование в Postman
 
-## Security Vulnerabilities
+**Инфраструктура и сервисы**
+- Mail, HTTP-клиент, Storage
+- Logging, обработка исключений (Exceptions)
+- Telescope, WebSocket
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Vue
 
-## License
+**Реактивность и логика**
+- Хуки жизненного цикла (Hooks), data, methods
+- Computed, watch, refs
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Компоненты**
+- Компоненты, props, emits
+- Модальные окна (Modal)
+
+**Практика**
+- CRUD на Vue
+- Axios, авторизация (Auth)
+- Интеграция с Laravel через Inertia
+
+## Лицензия
+
+Учебный код распространяется под лицензией [MIT](https://opensource.org/licenses/MIT).

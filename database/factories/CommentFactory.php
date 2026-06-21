@@ -20,10 +20,12 @@ class CommentFactory extends Factory {
         $status = fake()->randomElement(array_keys(Comment::getStatuses()));
 
         return [
-            'post_id' => Post::factory(),
+            // По умолчанию комментарий относится к посту (commentable = Post).
+            // В сидерах/тестах commentable переопределяется через ->for(..., 'commentable'):
+            // для ответа в ветке туда передаётся другой Comment.
+            'commentable_id' => Post::factory(),
+            'commentable_type' => Post::class,
             'author_id' => Profile::factory(),
-            // По умолчанию комментарий верхнего уровня; ответы (дерево) можно задать состоянием отдельно.
-            'parent_id' => null,
             'content' => fake()->paragraph(),
             'status' => $status,
             'published_at' => $status === Comment::STATUS_PUBLISHED

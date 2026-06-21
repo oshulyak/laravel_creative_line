@@ -53,14 +53,18 @@ class DatabaseSeeder extends Seeder {
         // 2. Случайные пользователи, у каждого — свой профиль (hasOne) через магический ->hasProfile().
         User::factory(10)->hasProfile()->create();
 
-        // 3. Справочные данные и контент. Порядок важен: посты ссылаются на профили и категории,
-        //    а лайки и комментарии — на уже существующие посты и профили.
+        // 3. Справочные данные и контент. Порядок важен и идёт по зависимостям:
+        //    посты ссылаются на профили и категории; комментарии — на посты;
+        //    изображения и файлы цепляются к постам и комментариям (Imageable/Fileable);
+        //    лайки ставятся в т.ч. на изображения, поэтому LikeSeeder идёт последним.
         $this->call([
             CategorySeeder::class,
             TagSeeder::class,
             PostSeeder::class,
-            LikeSeeder::class,
             CommentSeeder::class,
+            ImageSeeder::class,
+            FileSeeder::class,
+            LikeSeeder::class,
         ]);
     }
 }

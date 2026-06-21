@@ -9,11 +9,11 @@ return new class extends Migration {
      * Run the migrations.
      */
     public function up(): void {
-        Schema::create('post_profile_likes', function (Blueprint $table) {
+        Schema::create('files', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('profile_id')->index()->constrained('profiles');
-            $table->foreignId('post_id')->index()->constrained('posts');
-            $table->unique(['profile_id', 'post_id']);
+            $table->string('file_path');
+            // Полиморфный владелец файла: пост, комментарий или изображение.
+            $table->morphs('fileable');
             $table->timestamps();
         });
     }
@@ -22,6 +22,6 @@ return new class extends Migration {
      * Reverse the migrations.
      */
     public function down(): void {
-        Schema::dropIfExists('post_profile_likes');
+        Schema::dropIfExists('files');
     }
 };

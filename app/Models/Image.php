@@ -2,22 +2,43 @@
 
 namespace App\Models;
 
+use Database\Factories\ImageFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Image extends Model {
+    /** @use HasFactory<ImageFactory> */
+    use HasFactory;
+
     /**
      * @var list<string>
      */
     protected $fillable = [
-        'post_id',
         'img_path',
     ];
 
     /**
-     * Публикация, которой принадлежит изображение.
+     * Владелец изображения — пост, комментарий, категория или профиль
+     * (обратная сторона morphOne/morphMany).
      */
-    public function post(): BelongsTo {
-        return $this->belongsTo(Post::class);
+    public function imageable(): MorphTo {
+        return $this->morphTo();
+    }
+
+    /**
+     * Файл-оригинал изображения (Fileable: одно к одному).
+     */
+    public function file(): MorphOne {
+        return $this->morphOne(File::class, 'fileable');
+    }
+
+    /**
+     * Профили, лайкнувшие изображение (Likeable: многие ко многим через likeables).
+     */
+    public function likedByProfiles(): MorphToMany {
+        return $this->morphToMany(Profile::class, 'likeable')->withTimestamps();
     }
 }

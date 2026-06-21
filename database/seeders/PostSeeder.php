@@ -25,7 +25,9 @@ class PostSeeder extends Seeder {
             ->recycle($categories)
             ->create()
             ->each(function (Post $post) use ($tags) {
-                // Привязываем 1-3 случайных тега через pivot-таблицу post_tag (связь многие-ко-многим).
+                // Привязываем 1-3 случайных тега через полиморфный pivot taggables
+                // (Taggable: многие ко многим). attach() у morphToMany работает так же,
+                // как у обычного belongsToMany.
                 $post->tags()->attach(
                     $tags->random(fake()->numberBetween(1, 3))->pluck('id')
                 );

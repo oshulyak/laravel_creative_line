@@ -6,9 +6,10 @@ use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Profile extends Model {
     /** @use HasFactory<ProfileFactory> */
@@ -50,10 +51,31 @@ class Profile extends Model {
     }
 
     /**
-     * Публикации, которые лайкнул профиль (многие ко многим через post_profile_likes).
+     * Аватар профиля (Imageable: одно к одному).
      */
-    public function likedPosts(): BelongsToMany {
-        return $this->belongsToMany(Post::class, 'post_profile_likes', 'profile_id', 'post_id')->withTimestamps();
+    public function image(): MorphOne {
+        return $this->morphOne(Image::class, 'imageable');
+    }
+
+    /**
+     * Публикации, которые лайкнул профиль (Likeable: многие ко многим через likeables).
+     */
+    public function likedPosts(): MorphToMany {
+        return $this->morphedByMany(Post::class, 'likeable')->withTimestamps();
+    }
+
+    /**
+     * Комментарии, которые лайкнул профиль (Likeable: многие ко многим через likeables).
+     */
+    public function likedComments(): MorphToMany {
+        return $this->morphedByMany(Comment::class, 'likeable')->withTimestamps();
+    }
+
+    /**
+     * Изображения, которые лайкнул профиль (Likeable: многие ко многим через likeables).
+     */
+    public function likedImages(): MorphToMany {
+        return $this->morphedByMany(Image::class, 'likeable')->withTimestamps();
     }
 
     /**
@@ -62,11 +84,14 @@ class Profile extends Model {
      * Отличается от comments() выше: тот метод — это комментарии, которые
      * профиль НАПИСАЛ, а здесь — комментарии, оставленные ДРУГИМИ к его постам.
      *
-     * Первый ключ указан явно: posts.author_id ссылается на profiles,
-     * но назван author_id, а не profile_id. Второй (comments.post_id)
-     * стандартный, но передаётся следом, так как аргументы позиционные.
+     * После перехода на полиморфный commentable «дальний» ключ — это
+     * comments.commentable_id, но он указывает на пост только когда
+     * commentable_type = Post. Поэтому к hasManyThrough добавлено явное
+     * условие по типу — иначе в выборку могли бы попасть комментарии-ответы
+     * (commentable_type = Comment) со случайно совпавшим id.
      */
     public function postComments(): HasManyThrough {
-        return $this->hasManyThrough(Comment::class, Post::class, 'author_id', 'post_id');
+        return $this->hasManyThrough(Comment::class, Post::class, 'author_id', 'commentable_id')
+            ->where('comments.commentable_type', Post::class);
     }
 }

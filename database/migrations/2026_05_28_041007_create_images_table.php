@@ -11,8 +11,11 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('images', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('post_id')->index()->constrained('posts');
             $table->string('img_path');
+            // Полиморфная связь: изображение принадлежит посту, комментарию,
+            // категории или профилю. morphs() создаёт imageable_type + imageable_id
+            // и составной индекс по ним. Внешнего ключа здесь нет — родитель не один.
+            $table->morphs('imageable');
             $table->timestamps();
         });
     }

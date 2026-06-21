@@ -21,11 +21,11 @@ class RelationsThroughTest extends TestCase {
         // Arrange: категория с постом, у поста — 2 комментария.
         $category = Category::factory()->create();
         $post = Post::factory()->for($category)->create();
-        $expectedComments = Comment::factory()->count(2)->for($post)->create();
+        $expectedComments = Comment::factory()->count(2)->for($post, 'commentable')->create();
 
         // Шум: чужая категория со своим постом и комментарием.
         $foreignPost = Post::factory()->create();
-        $foreignComment = Comment::factory()->for($foreignPost)->create();
+        $foreignComment = Comment::factory()->for($foreignPost, 'commentable')->create();
 
         // Act.
         $comments = $category->comments;
@@ -85,12 +85,12 @@ class RelationsThroughTest extends TestCase {
         // Arrange: автор и его пост, на посту — чужой комментарий.
         $author = Profile::factory()->create();
         $post = Post::factory()->for($author, 'author')->create();
-        $commentOnHisPost = Comment::factory()->for($post)->create();
+        $commentOnHisPost = Comment::factory()->for($post, 'commentable')->create();
 
         // Шум: комментарий самого автора, но к ЧУЖОМУ посту.
         $foreignPost = Post::factory()->create();
         $commentHeWroteElsewhere = Comment::factory()
-            ->for($foreignPost)
+            ->for($foreignPost, 'commentable')
             ->for($author, 'author')
             ->create();
 

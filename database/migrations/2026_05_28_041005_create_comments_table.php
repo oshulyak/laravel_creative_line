@@ -11,9 +11,11 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('comments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('post_id')->index()->constrained('posts');
+            // Полиморфный «родитель» комментария: пост (комментарий к посту)
+            // или другой комментарий (ответ в ветке). Заменяет сразу две прежние
+            // колонки — post_id и parent_id — одной связью commentable.
+            $table->morphs('commentable');
             $table->foreignId('author_id')->index()->constrained('profiles');
-            $table->foreignId('parent_id')->nullable()->index()->constrained('comments');
             $table->text('content');
             $table->string('status');
             $table->timestamp('published_at')->nullable();
