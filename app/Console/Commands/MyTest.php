@@ -15,7 +15,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
-#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
+#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddHasLog : Запустить логируемые события модели с HasLog} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
 #[Description('Демонстрирует учебные блоки через dd().')]
 class MyTest extends Command {
     /**
@@ -26,16 +26,20 @@ class MyTest extends Command {
             $this->ddLog();
         }
 
+        if ($this->option('ddHasLog')) {
+            $this->ddHasLog();
+        }
+
         if ($this->option('ddMorph')) {
             $this->ddMorph();
         }
 
-        $this->warn('Укажите одну из опций: --ddLog или --ddMorph.');
+        $this->warn('Укажите одну из опций: --ddLog, --ddHasLog или --ddMorph.');
     }
 
     /**
-     * Создаёт, обновляет, получает и удаляет Post, чтобы observer записал события
-     * created, updated, retrieved и deleted в таблицу logs.
+     * Создаёт, обновляет, получает и удаляет Post, чтобы PostObserver записал
+     * события created, updated, retrieved и deleted в таблицу logs.
      */
     private function ddLog(): void {
         $lastLogId = Log::query()->max('id') ?? 0;
@@ -51,7 +55,39 @@ class MyTest extends Command {
         $retrievedPost = Post::query()->findOrFail($post->id);
         $retrievedPost->delete();
 
-        $logs = Log::query()
+        $logs = $this->logsCreatedAfter($lastLogId);
+
+        dd('PostObserver log events', $logs);
+    }
+
+    /**
+     * Создаёт, обновляет, получает и удаляет Category, чтобы трейт HasLog
+     * записал события created, updated, retrieved и deleted в таблицу logs.
+     */
+    private function ddHasLog(): void {
+        $lastLogId = Log::query()->max('id') ?? 0;
+
+        $category = Category::create([
+            'title' => 'Log demo category created '.Str::uuid(),
+        ]);
+
+        $category->update([
+            'title' => 'Log demo category updated '.Str::uuid(),
+        ]);
+
+        $retrievedCategory = Category::query()->findOrFail($category->id);
+        $retrievedCategory->delete();
+
+        $logs = $this->logsCreatedAfter($lastLogId);
+
+        dd('HasLog log events', $logs);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function logsCreatedAfter(int $lastLogId): array {
+        return Log::query()
             ->where('id', '>', $lastLogId)
             ->orderBy('id')
             ->get()
@@ -65,8 +101,6 @@ class MyTest extends Command {
                 'created_at' => $log->created_at,
             ])
             ->all();
-
-        dd('Log events (created, updated, retrieved, deleted)', $logs);
     }
 
     /**

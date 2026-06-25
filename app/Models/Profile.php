@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\HasLog;
 use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Profile extends Model {
     /** @use HasFactory<ProfileFactory> */
-    use HasFactory;
+    use HasFactory, HasLog;
 
     /**
      * @var list<string>

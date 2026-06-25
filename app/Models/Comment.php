@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\HasLog;
 use Database\Factories\CommentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Comment extends Model {
     /** @use HasFactory<CommentFactory> */
-    use HasFactory;
+    use HasFactory, HasLog;
 
     public const STATUS_PUBLISHED = 'published';
 

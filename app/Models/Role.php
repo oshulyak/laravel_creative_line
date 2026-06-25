@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Traits\HasLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Role extends Model {
+    use HasLog;
+
     /**
      * @var list<string>
      */
