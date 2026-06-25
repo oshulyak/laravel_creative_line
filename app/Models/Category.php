@@ -21,6 +21,14 @@ class Category extends Model {
         'title',
     ];
 
+    protected static function booted(): void {
+        static::created(function (Category $category): void {
+            if (app()->runningInConsole()) {
+                echo 'Category::booted обработал событие created для категории #'.$category->id.PHP_EOL;
+            }
+        });
+    }
+
     /**
      * Публикации этой категории.
      */

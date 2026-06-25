@@ -6,7 +6,7 @@ use App\Models\Log;
 use Illuminate\Database\Eloquent\Model;
 
 trait HasLog {
-    protected static function booted(): void {
+    protected static function bootHasLog(): void {
         static::created(function (Model $model): void {
             self::logModelEvent($model, 'created');
         });

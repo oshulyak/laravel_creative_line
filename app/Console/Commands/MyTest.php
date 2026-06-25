@@ -15,7 +15,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
-#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddHasLog : Запустить логируемые события модели с HasLog} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
+#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddHasLog : Запустить логируемые события модели с HasLog} {--ddbootHasLog : Показать совместную работу bootHasLog трейта и booted модели} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
 #[Description('Демонстрирует учебные блоки через dd().')]
 class MyTest extends Command {
     /**
@@ -30,11 +30,15 @@ class MyTest extends Command {
             $this->ddHasLog();
         }
 
+        if ($this->option('ddbootHasLog')) {
+            $this->ddbootHasLog();
+        }
+
         if ($this->option('ddMorph')) {
             $this->ddMorph();
         }
 
-        $this->warn('Укажите одну из опций: --ddLog, --ddHasLog или --ddMorph.');
+        $this->warn('Укажите одну из опций: --ddLog, --ddHasLog, --ddbootHasLog или --ddMorph.');
     }
 
     /**
@@ -61,12 +65,34 @@ class MyTest extends Command {
     }
 
     /**
-     * Создаёт, обновляет, получает и удаляет Category, чтобы трейт HasLog
+     * Создаёт, обновляет, получает и удаляет Tag, чтобы трейт HasLog
      * записал события created, updated, retrieved и deleted в таблицу logs.
      */
     private function ddHasLog(): void {
         $lastLogId = Log::query()->max('id') ?? 0;
 
+        $this->runTagLogDemo();
+
+        $logs = $this->logsCreatedAfter($lastLogId);
+
+        dd('HasLog log events', $logs);
+    }
+
+    /**
+     * Создаёт, обновляет, получает и удаляет Category. В этом блоке одновременно
+     * срабатывают bootHasLog() из трейта и booted() из самой модели Category.
+     */
+    private function ddbootHasLog(): void {
+        $lastLogId = Log::query()->max('id') ?? 0;
+
+        $this->runCategoryLogDemo();
+
+        $logs = $this->logsCreatedAfter($lastLogId);
+
+        dd('bootHasLog + Category::booted log events', $logs);
+    }
+
+    private function runCategoryLogDemo(): void {
         $category = Category::create([
             'title' => 'Log demo category created '.Str::uuid(),
         ]);
@@ -77,10 +103,19 @@ class MyTest extends Command {
 
         $retrievedCategory = Category::query()->findOrFail($category->id);
         $retrievedCategory->delete();
+    }
 
-        $logs = $this->logsCreatedAfter($lastLogId);
+    private function runTagLogDemo(): void {
+        $tag = Tag::create([
+            'title' => 'Log demo tag created '.Str::uuid(),
+        ]);
 
-        dd('HasLog log events', $logs);
+        $tag->update([
+            'title' => 'Log demo tag updated '.Str::uuid(),
+        ]);
+
+        $retrievedTag = Tag::query()->findOrFail($tag->id);
+        $retrievedTag->delete();
     }
 
     /**
