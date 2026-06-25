@@ -6,23 +6,76 @@ use App\Models\Category;
 use App\Models\Comment;
 use App\Models\File;
 use App\Models\Image;
+use App\Models\Log;
 use App\Models\Post;
 use App\Models\Profile;
 use App\Models\Tag;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
-#[Signature('my:test')]
-#[Description('Демонстрирует полиморфные (morph) связи моделей через dd() (урок 7).')]
+#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
+#[Description('Демонстрирует учебные блоки через dd().')]
 class MyTest extends Command {
+    /**
+     * Запускает выбранный учебный блок.
+     */
+    public function handle(): void {
+        if ($this->option('ddLog')) {
+            $this->ddLog();
+        }
+
+        if ($this->option('ddMorph')) {
+            $this->ddMorph();
+        }
+
+        $this->warn('Укажите одну из опций: --ddLog или --ddMorph.');
+    }
+
+    /**
+     * Создаёт, обновляет, получает и удаляет Post, чтобы observer записал события
+     * created, updated, retrieved и deleted в таблицу logs.
+     */
+    private function ddLog(): void {
+        $lastLogId = Log::query()->max('id') ?? 0;
+
+        $post = Post::factory()->create([
+            'title' => 'Log demo created '.Str::uuid(),
+        ]);
+
+        $post->update([
+            'title' => 'Log demo updated '.Str::uuid(),
+        ]);
+
+        $retrievedPost = Post::query()->findOrFail($post->id);
+        $retrievedPost->delete();
+
+        $logs = Log::query()
+            ->where('id', '>', $lastLogId)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Log $log): array => [
+                'id' => $log->id,
+                'model' => $log->model,
+                'action' => $log->action,
+                'old_attributes' => $log->old_attributes,
+                'new_attributes' => $log->new_attributes,
+                'changed_attributes' => $log->changed_attributes,
+                'created_at' => $log->created_at,
+            ])
+            ->all();
+
+        dd('Log events (created, updated, retrieved, deleted)', $logs);
+    }
+
     /**
      * Достаёт из базы записи со связанными данными и выводит результат каждой
      * morph-связи через dd(). Для каждой группы показана и «прямая» сторона
      * (morphOne/morphMany/morphToMany), и обратная (morphTo) — кто полиморфный
      * родитель. Данные предполагаются заполненными сидерами (`php artisan db:seed`).
      */
-    public function handle(): void {
+    private function ddMorph(): void {
         dd(
             'Imageable (morphOne / morphMany ↔ morphTo)',
             $this->imageable(),
