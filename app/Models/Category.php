@@ -14,6 +14,27 @@ class Category extends Model {
     /** @use HasFactory<CategoryFactory> */
     use HasFactory, HasLog;
 
+    /*
+     * Альтернатива для учебного разбора: если бы в HasLog метод назывался booted(),
+     * а модели тоже нужен был свой booted(), метод трейта можно было бы подключить
+     * через alias и вызвать вручную:
+     *
+     * use HasFactory, HasLog {
+     *     HasLog::booted as bootedHasLog;
+     * }
+     *
+     * protected static function booted(): void {
+     *     static::bootedHasLog();
+     *
+     *     static::created(function (Category $category): void {
+     *         // Собственные обработчики событий модели.
+     *     });
+     * }
+     *
+     * В Laravel-way для таких трейтов лучше использовать bootHasLog(),
+     * потому что Laravel вызывает его автоматически.
+     */
+
     /**
      * @var list<string>
      */

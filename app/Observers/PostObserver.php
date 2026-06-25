@@ -35,12 +35,6 @@ class PostObserver {
     }
 
     private function log(Post $post, string $action): void {
-        Log::create([
-            'model' => $post::class,
-            'action' => $action,
-            'old_attributes' => $post->getOriginal(),
-            'new_attributes' => $post->getAttributes(),
-            'changed_attributes' => $post->getDirty(),
-        ]);
+        Log::writeForModel($post, $action);
     }
 }

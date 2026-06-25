@@ -25,12 +25,6 @@ trait HasLog {
     }
 
     private static function logModelEvent(Model $model, string $action): void {
-        Log::create([
-            'model' => $model::class,
-            'action' => $action,
-            'old_attributes' => $model->getOriginal(),
-            'new_attributes' => $model->getAttributes(),
-            'changed_attributes' => $model->getDirty(),
-        ]);
+        Log::writeForModel($model, $action);
     }
 }

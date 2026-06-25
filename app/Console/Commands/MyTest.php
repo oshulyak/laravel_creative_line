@@ -15,7 +15,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
-#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddHasLog : Запустить логируемые события модели с HasLog} {--ddbootHasLog : Показать совместную работу bootHasLog трейта и booted модели} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
+#[Signature('my:test {--ddLog : Запустить логируемые события Post и вывести созданные Log-записи} {--ddHasLog : Запустить логируемые события модели с HasLog} {--ddbootHasLog : Показать совместную работу bootHasLog трейта и booted модели} {--ddLogEvents : Показать custom events начала и окончания логирования} {--ddMorph : Вывести демонстрацию полиморфных связей}')]
 #[Description('Демонстрирует учебные блоки через dd().')]
 class MyTest extends Command {
     /**
@@ -34,11 +34,15 @@ class MyTest extends Command {
             $this->ddbootHasLog();
         }
 
+        if ($this->option('ddLogEvents')) {
+            $this->ddLogEvents();
+        }
+
         if ($this->option('ddMorph')) {
             $this->ddMorph();
         }
 
-        $this->warn('Укажите одну из опций: --ddLog, --ddHasLog, --ddbootHasLog или --ddMorph.');
+        $this->warn('Укажите одну из опций: --ddLog, --ddHasLog, --ddbootHasLog, --ddLogEvents или --ddMorph.');
     }
 
     /**
@@ -90,6 +94,17 @@ class MyTest extends Command {
         $logs = $this->logsCreatedAfter($lastLogId);
 
         dd('bootHasLog + Category::booted log events', $logs);
+    }
+
+    /**
+     * Демонстрирует custom events, которые dispatch-ятся до и после создания Log.
+     */
+    private function ddLogEvents(): void {
+        $lastLogId = Log::query()->max('id') ?? 0;
+
+        $this->runTagLogDemo();
+
+        dd('Custom log events: listener messages were printed above', $this->logsCreatedAfter($lastLogId));
     }
 
     private function runCategoryLogDemo(): void {
