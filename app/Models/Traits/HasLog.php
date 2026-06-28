@@ -53,13 +53,16 @@ trait HasLog {
             ->lower()
             ->toString();
 
-        Log::build([
+        $logger = Log::build([
             'driver' => 'single',
             'path' => storage_path("logs/{$modelName}/{$event}.log"),
             'level' => 'info',
             'replace_placeholders' => true,
-            'tap' => [ModelLogFormatter::class],
-        ])->info('{model} {event}', [
+        ]);
+
+        (new ModelLogFormatter)($logger);
+
+        $logger->info('{model} {event}', [
             'model' => $model::class,
             'event' => $event,
             ...$context,
