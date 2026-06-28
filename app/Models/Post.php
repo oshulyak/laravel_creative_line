@@ -2,19 +2,17 @@
 
 namespace App\Models;
 
-use App\Observers\PostObserver;
+use App\Models\Traits\HasLog;
 use Database\Factories\PostFactory;
-use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
-#[ObservedBy([PostObserver::class])]
 class Post extends Model {
     /** @use HasFactory<PostFactory> */
-    use HasFactory;
+    use HasFactory, HasLog;
 
     public const STATUS_PUBLISHED = 1;
 
