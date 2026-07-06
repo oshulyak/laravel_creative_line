@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
 use App\Http\Controllers\Api\ImageController;
@@ -19,7 +20,18 @@ use Illuminate\Support\Facades\Route;
 // update, destroy — и НЕ создаёт create/edit (HTML-формы), в отличие от Route::resource().
 // Имя параметра маршрута Laravel берёт из единственного числа ресурса:
 // posts → {post}, categories → {category} и т.д. — совпадает с типами в контроллерах.
-Route::apiResource('posts', PostController::class);
+
+Route::post('auth/login', [AuthController::class, 'login']);
+Route::group(['middleware' => 'jwt.auth', 'prefix' => 'auth'], function () {
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('refresh', [AuthController::class, 'refresh']);
+    Route::post('me', [AuthController::class, 'me']);
+});
+
+Route::group(['middleware' => 'jwt.auth'], function () {
+    Route::apiResource('posts', PostController::class);
+});
+
 Route::apiResource('categories', CategoryController::class);
 Route::apiResource('tags', TagController::class);
 Route::apiResource('roles', RoleController::class);
