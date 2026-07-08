@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -13,6 +14,9 @@ class DatabaseSeeder extends Seeder {
      * Seed the application's database.
      */
     public function run(): void {
+        // 0. Базовые роли — создаём до выдачи роли admin тестовому пользователю ниже.
+        $this->call(RoleSeeder::class);
+
         // 1. Фиксированный пользователь с известным логином — удобно входить вручную при разработке.
         //    firstOrCreate делает сидер идемпотентным: повторный db:seed (даже без migrate:fresh)
         //    не создаст дубль и не упадёт на уникальном email. Остальные поля (password 'password',
@@ -37,6 +41,13 @@ class DatabaseSeeder extends Seeder {
             'gender' => 'male',
             'city' => 'Moscow',
         ]);
+
+        // Тестовому пользователю выдаём роль admin, чтобы под ним проверять
+        // админ-доступ к API. syncWithoutDetaching идемпотентен — повторный
+        // сид не создаёт дубль в role_user.
+        $testUser->roles()->syncWithoutDetaching(
+            Role::where('title', 'admin')->value('id'),
+        );
 
         // Вариант 2 (ленивый), как альтернатива созданию пользователя выше:
         //   фабрика отрабатывает только если строки ещё нет — firstWhere вернёт

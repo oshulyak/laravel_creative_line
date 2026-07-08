@@ -7,6 +7,7 @@ use App\Models\Traits\HasLog;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -56,6 +57,22 @@ class User extends Authenticatable implements JWTSubject {
      */
     public function roles(): BelongsToMany {
         return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
+    /**
+     * Является ли пользователь администратором — есть ли у него роль admin.
+     *
+     * Новый стиль аксессоров Laravel: метод isAdmin() автоматически доступен
+     * как атрибут $user->is_admin (имя приводится к snake_case). Для одиночной
+     * проверки в middleware обращение к $this->roles допустимо; при массовой
+     * проверке стоит заранее eager-load'ить связь
+     * ( `$users = User::with('roles')->get();` ),
+     * иначе получим N+1.
+     */
+    protected function isAdmin(): Attribute {
+        return Attribute::make(
+            get: fn (): bool => $this->roles->contains('title', 'admin'),
+        );
     }
 
     /**
