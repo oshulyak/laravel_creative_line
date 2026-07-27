@@ -1,0 +1,682 @@
+<meta charset="utf-8">
+<title>Post Filter · как запрос проходит через фильтр</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a3441;
+    --text: #d7dee8;
+    --muted: #8b98a9;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0a44a;
+    --pink: #ff9bce;
+    --purple: #bc8cff;
+    --code-bg: #0b0f16;
+    --shadow: 0 8px 30px rgba(0,0,0,.35);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--ui); }
+  a { color: var(--accent); }
+
+  header {
+    padding: 22px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #131a24, #0d1117);
+  }
+  header h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .2px; }
+  header h1 .req { color: var(--accent); }
+  header h1 .arr { color: var(--muted); margin: 0 8px; }
+  header h1 .res { color: var(--accent-2); }
+  header p { margin: 0; color: var(--muted); font-size: 13px; max-width: 900px; line-height: 1.5; }
+
+  .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 0;
+    align-items: stretch;
+  }
+  @media (max-width: 1100px) { .wrap { grid-template-columns: 1fr; } }
+
+  /* ---------- Diagram ---------- */
+  .stage { padding: 24px 28px 40px; overflow-x: auto; }
+
+  .lane-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px;
+    color: var(--muted); margin: 18px 0 10px; font-weight: 600;
+  }
+  .lane-label:first-child { margin-top: 0; }
+
+  .flow { position: relative; max-width: 620px; }
+
+  .node {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 0 0 30px;
+    cursor: pointer;
+    transition: border-color .18s, box-shadow .18s, transform .18s, background .18s;
+  }
+  .node:last-child { margin-bottom: 0; }
+  .node::after {
+    content: "";
+    position: absolute;
+    left: 50%; bottom: -30px;
+    width: 2px; height: 30px;
+    background: linear-gradient(var(--border), var(--border));
+    transform: translateX(-50%);
+  }
+  .node:last-child::after { display: none; }
+  .node .arrowhead {
+    position: absolute; left: 50%; bottom: -30px;
+    transform: translateX(-50%);
+    color: var(--muted); font-size: 12px; line-height: 1;
+    pointer-events: none;
+  }
+  .node:hover { border-color: #3d4b5c; transform: translateY(-1px); }
+  .node.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+    background: var(--panel-2);
+  }
+  .node.dim { opacity: .45; }
+
+  .node .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--accent); font-size: 12px; font-weight: 700;
+    font-family: var(--mono); margin-right: 9px; flex: none;
+  }
+  .node.active .num { background: var(--accent); color: #06111f; border-color: var(--accent); }
+  .node .head { display: flex; align-items: center; }
+  .node .title { font-size: 14px; font-weight: 600; }
+  .node .sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 6px; margin-left: 31px; word-break: break-word; }
+  .node .tag {
+    margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+    color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px;
+  }
+  .node.fix { }
+  .node.fix .title::after {
+    content: "исправлено"; font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--warn); border: 1px solid rgba(240,164,74,.4); background: rgba(240,164,74,.08);
+    border-radius: 20px; padding: 1px 7px; margin-left: 9px; vertical-align: middle; font-weight: 700;
+  }
+
+  /* branch cards (trait / abstract) */
+  .branch {
+    position: relative;
+    margin: -18px 0 30px auto;
+    width: 340px;
+    background: #14100c;
+    border: 1px dashed var(--purple);
+    border-radius: 12px;
+    padding: 10px 13px;
+    cursor: pointer;
+    transition: box-shadow .18s, border-color .18s;
+  }
+  .branch.abstract { background: #0c1410; border-color: var(--accent-2); }
+  .branch::before {
+    content: attr(data-rel);
+    position: absolute; top: -9px; left: 14px;
+    font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
+    background: var(--bg); padding: 0 6px; color: var(--purple); font-weight: 700;
+  }
+  .branch.abstract::before { color: var(--accent-2); }
+  .branch.active { box-shadow: 0 0 0 1px currentColor, var(--shadow); }
+  .branch.active.trait { color: var(--purple); }
+  .branch.active.abstract { color: var(--accent-2); }
+  .branch .bt { font-size: 13px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+  .branch .bd { font-size: 11.5px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+
+  /* ---------- Side panel ---------- */
+  .side {
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - 118px);
+    position: sticky; top: 0;
+  }
+  @media (max-width: 1100px) { .side { border-left: none; border-top: 1px solid var(--border); max-height: none; position: static; } }
+
+  .side-inner { padding: 18px 20px; overflow-y: auto; flex: 1; }
+
+  .stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .stepper button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: var(--ui);
+    transition: background .15s, border-color .15s;
+  }
+  .stepper button:hover { border-color: var(--accent); }
+  .stepper button.play { background: var(--accent); color: #06111f; border-color: var(--accent); font-weight: 600; }
+  .stepper .count { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .detail-title { font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+  .detail-desc { font-size: 13px; line-height: 1.55; color: var(--text); margin: 0 0 12px; }
+  .detail-desc b { color: var(--accent-2); font-weight: 600; }
+  .detail-desc code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--pink); }
+
+  pre.code {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 13px; margin: 0 0 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12px; line-height: 1.55; color: #c9d3df;
+  }
+  pre.code .k { color: var(--purple); }
+  pre.code .f { color: var(--accent); }
+  pre.code .s { color: var(--accent-2); }
+  pre.code .c { color: var(--muted); font-style: italic; }
+  pre.code .v { color: var(--pink); }
+
+  .know {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+    margin: 4px 0 8px; font-weight: 600;
+  }
+  .know-btns { display: flex; gap: 6px; margin-bottom: 18px; }
+  .know-btns button {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 7px 6px; font-size: 12px; cursor: pointer; font-family: var(--ui);
+  }
+  .know-btns button.on[data-k="know"] { background: rgba(126,231,135,.14); border-color: var(--accent-2); color: var(--accent-2); }
+  .know-btns button.on[data-k="fuzzy"] { background: rgba(240,164,74,.14); border-color: var(--warn); color: var(--warn); }
+  .know-btns button.on[data-k="unknown"] { background: rgba(255,155,206,.14); border-color: var(--pink); color: var(--pink); }
+
+  .divider { height: 1px; background: var(--border); margin: 4px 0 16px; }
+
+  /* filter builder */
+  .fb-title { font-size: 13px; font-weight: 700; margin: 0 0 3px; }
+  .fb-note { font-size: 11.5px; color: var(--muted); margin: 0 0 11px; line-height: 1.45; }
+  .params { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 13px; }
+  .params label {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 4px 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); cursor: pointer;
+    user-select: none;
+  }
+  .params label.on { border-color: var(--accent); color: var(--text); background: #16283f; }
+  .params input { accent-color: var(--accent); margin: 0; }
+
+  .sql-box {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 13px; font-family: var(--mono); font-size: 11.5px; line-height: 1.7; color: #c9d3df;
+    overflow-x: auto; min-height: 60px;
+  }
+  .sql-box .q { color: var(--accent); }
+  .sql-box .m { color: var(--accent-2); }
+  .sql-box .a { color: var(--pink); }
+  .sql-box .empty { color: var(--muted); font-style: italic; font-family: var(--ui); }
+  .sql-box .drop { color: var(--muted); }
+
+  /* ---------- Prompt ---------- */
+  .prompt-bar {
+    border-top: 1px solid var(--border);
+    background: var(--panel-2);
+    padding: 14px 20px;
+  }
+  .prompt-bar .ph { display: flex; align-items: center; margin-bottom: 8px; }
+  .prompt-bar .ph span { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+  .prompt-bar .ph button {
+    margin-left: auto; background: var(--accent); color: #06111f; border: none;
+    border-radius: 7px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .prompt-bar .ph button.copied { background: var(--accent-2); }
+  .prompt-out {
+    font-size: 12.5px; line-height: 1.6; color: var(--text);
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 13px; max-height: 150px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .presets button {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 20px; padding: 5px 12px; font-size: 12px; cursor: pointer; font-family: var(--ui);
+  }
+  .presets button:hover { border-color: var(--accent); color: var(--text); }
+</style>
+
+<header>
+  <h1><span class="req">GET /api/posts?…</span><span class="arr">──▶</span><span class="res">JSON-ответ</span></h1>
+  <p>Интерактивная схема: как HTTP-запрос проходит через фильтр постов. Кликайте узлы или листайте шаги «Далее», чтобы проследить путь от контроллера через <code>trait&nbsp;HasFilter</code>, <code>scopeFilter()</code>, <code>PostFilter</code> и <code>AbstractFilter::apply()</code> до итогового ресурса. Оранжевой меткой «исправлено» отмечены места, уточнённые относительно исходного представления.</p>
+</header>
+
+<div class="wrap">
+  <!-- ===================== DIAGRAM ===================== -->
+  <div class="stage">
+    <div class="lane-label">HTTP-слой</div>
+    <div class="flow" id="flow">
+      <div class="node fix" data-node="api">
+        <div class="head"><span class="num">1</span><span class="title">HTTP-запрос</span><span class="tag">GET</span></div>
+        <div class="sub">GET /api/posts?title=laravel&amp;category_id=3  — query-параметры, не JSON-body</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node fix" data-node="request">
+        <div class="head"><span class="num">2</span><span class="title">IndexRequest · валидация</span><span class="tag">FormRequest</span></div>
+        <div class="sub">rules() проверяет параметры → в контроллер уходит только $request-&gt;validated()</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node" data-node="controller">
+        <div class="head"><span class="num">3</span><span class="title">PostController@index</span></div>
+        <div class="sub">Post::query()-&gt;filter($data)-&gt;with('category')-&gt;get()</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="lane-label">Модель · Eloquent Builder</div>
+
+      <div class="node" data-node="query">
+        <div class="head"><span class="num">4</span><span class="title">Post::query() → Builder</span></div>
+        <div class="sub">Создаётся Eloquent\Builder; внутри он хранит ссылку на модель Post ($builder-&gt;getModel())</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node fix" data-node="filter">
+        <div class="head"><span class="num">5</span><span class="title">-&gt;filter($data)</span><span class="tag">магия scope</span></div>
+        <div class="sub">Метода filter() на Builder нет → Builder::__call ловит вызов и ищет локальный scope модели</div>
+      </div>
+
+      <div class="branch trait" data-node="trait" data-rel="Post use HasFilter (trait)">
+        <div class="bt">6 · HasFilter::scopeFilter($builder,$data)</div>
+        <div class="bd">Соглашение: filter → <b>scope</b>Filter. Trait подключён к Post, поэтому scope виден Builder’у. Формирует имя класса: <code>App\Filters\PostFilter</code> из <code>class_basename($this).'Filter'</code> и вызывает <code>(new PostFilter)-&gt;apply(...)</code>.</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node" data-node="postfilter">
+        <div class="head"><span class="num">7</span><span class="title">new PostFilter → apply()</span></div>
+        <div class="sub">PostFilter хранит белый список $keys разрешённых для фильтрации атрибутов</div>
+      </div>
+
+      <div class="branch abstract" data-node="abstract" data-rel="PostFilter extends AbstractFilter">
+        <div class="bt">8-9 · AbstractFilter::apply($builder,$data)</div>
+        <div class="bd">foreach по $keys → если <code>isset($data[$key])</code>, вызывается одноимённый метод <code>Str::camel($key)</code> уже в PostFilter. Сам apply условий не пишет — он диспетчер.</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node fix" data-node="methods">
+        <div class="head"><span class="num">10</span><span class="title">Методы-условия PostFilter</span></div>
+        <div class="sub">id()/title()/categoryTitle()… добавляют where / whereRelation в тот же $builder</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="lane-label">Результат · ответ</div>
+
+      <div class="node" data-node="get">
+        <div class="head"><span class="num">11</span><span class="title">-&gt;get() → Collection&lt;Post&gt;</span></div>
+        <div class="sub">Builder с накопленными where выполняет SQL; category подгружена заранее (eager load)</div>
+      </div>
+      <span class="arrowhead">▼</span>
+
+      <div class="node fix" data-node="resource">
+        <div class="head"><span class="num">12</span><span class="title">PostResource → resolve() → JSON</span></div>
+        <div class="sub">PostResource::collection($posts)-&gt;resolve() → массив → HTTP-ответ JSON</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SIDE PANEL ===================== -->
+  <div class="side">
+    <div class="side-inner">
+      <div class="presets" id="presets"></div>
+
+      <div class="stepper">
+        <button id="prev">◀ Назад</button>
+        <button id="next">Далее ▶</button>
+        <button id="play" class="play">▶ Проиграть</button>
+        <span class="count" id="count">1 / 12</span>
+      </div>
+
+      <div class="detail-title" id="dTitle"></div>
+      <p class="detail-desc" id="dDesc"></p>
+      <pre class="code" id="dCode"></pre>
+
+      <div class="know">Насколько понятен этот шаг?</div>
+      <div class="know-btns" id="knowBtns">
+        <button data-k="know">Понятно</button>
+        <button data-k="fuzzy">Разбираю</button>
+        <button data-k="unknown">Непонятно</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="fb-title">Живой конструктор запроса</div>
+      <p class="fb-note">Отметьте, какие параметры пришли в запросе. Ниже видно, как <code>apply()</code> проходит по <code>$keys</code>, проверяет <code>isset()</code> и вызывает метод-условие — так собирается запрос.</p>
+      <div class="params" id="params"></div>
+      <div class="sql-box" id="sqlBox"></div>
+    </div>
+
+    <div class="prompt-bar">
+      <div class="ph">
+        <span>Промпт для изучения</span>
+        <button id="copyBtn">Копировать</button>
+      </div>
+      <div class="prompt-out" id="promptOut"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- STEP DATA ----------
+const steps = [
+  {
+    node: "api", title: "1 · HTTP-запрос приходит на маршрут",
+    desc: "Это <b>GET-запрос с query-параметрами</b> (например <code>?title=laravel&category_id=3</code>), а не JSON в теле. Маршрут <code>Route::apiResource('posts', …)</code> направляет GET /api/posts в метод <code>index</code>.",
+    code: `<span class="c">// routes/api.php</span>
+<span class="f">Route</span>::<span class="f">apiResource</span>(<span class="s">'posts'</span>, PostController::<span class="k">class</span>);
+<span class="c">// GET /api/posts?title=laravel&category_id=3</span>`
+  },
+  {
+    node: "request", title: "2 · IndexRequest валидирует параметры",
+    desc: "<b>Пропущенный в исходной схеме шаг.</b> До кода контроллера Laravel создаёт <code>IndexRequest</code> (FormRequest) и прогоняет <code>rules()</code>. В фильтр попадёт <b>только</b> <code>$request->validated()</code> — очищенные и проверенные данные.",
+    code: `<span class="c">// IndexRequest::rules()</span>
+<span class="k">return</span> [
+  <span class="s">'category_id'</span> => [<span class="s">'nullable'</span>,<span class="s">'integer'</span>,<span class="s">'exists:categories,id'</span>],
+  <span class="s">'title'</span>       => [<span class="s">'nullable'</span>,<span class="s">'string'</span>,<span class="s">'max:255'</span>],
+  <span class="c">// … по каждому атрибуту Post</span>
+];`
+  },
+  {
+    node: "controller", title: "3 · PostController@index",
+    desc: "Контроллер строит цепочку: <code>query()</code> → <code>filter()</code> → <code>with('category')</code> (eager load, чтобы избежать N+1) → <code>get()</code>, затем оборачивает в ресурс.",
+    code: `<span class="k">public function</span> <span class="f">index</span>(IndexRequest <span class="v">$request</span>): <span class="k">array</span> {
+  <span class="v">$posts</span> = Post::<span class="f">query</span>()
+    -><span class="f">filter</span>(<span class="v">$request</span>-><span class="f">validated</span>())
+    -><span class="f">with</span>(<span class="s">'category'</span>)
+    -><span class="f">get</span>();
+
+  <span class="k">return</span> PostResource::<span class="f">collection</span>(<span class="v">$posts</span>)-><span class="f">resolve</span>();
+}`
+  },
+  {
+    node: "query", title: "4 · Post::query() создаёт Builder",
+    desc: "<code>query()</code> возвращает новый <code>Eloquent\\Builder</code>. Builder <b>хранит ссылку на модель</b> Post — благодаря этому он позже сможет найти её scope’ы и trait-методы.",
+    code: `<span class="v">$builder</span> = Post::<span class="f">query</span>();
+<span class="v">$builder</span>-><span class="f">getModel</span>(); <span class="c">// экземпляр Post</span>`
+  },
+  {
+    node: "filter", title: "5 · ->filter($data): метода нет на Builder",
+    desc: "У <code>Builder</code> нет метода <code>filter()</code>. Срабатывает <code>Builder::__call</code>: он видит, что у модели есть <b>локальный scope</b> с именем <code>scopeFilter</code>, и перенаправляет вызов туда. Это и есть «магия» Laravel scopes.",
+    code: `<span class="c">// упрощённо, ядро Laravel</span>
+<span class="k">public function</span> <span class="f">__call</span>(<span class="v">$method</span>, <span class="v">$params</span>) {
+  <span class="k">if</span> (<span class="v">$this</span>->model-><span class="f">hasNamedScope</span>(<span class="v">$method</span>)) {
+    <span class="k">return</span> <span class="v">$this</span>->model-><span class="f">callNamedScope</span>(<span class="v">$method</span>, ...);
+  }
+}`
+  },
+  {
+    node: "trait", title: "6 · HasFilter::scopeFilter()",
+    desc: "Scope живёт в trait <code>HasFilter</code>, подключённом к Post — <b>именно поэтому Builder его находит</b>. По соглашению <code>filter</code> → <code>scopeFilter</code>. Здесь из имени модели собирается класс фильтра и вызывается <code>apply()</code>.",
+    code: `<span class="k">public function</span> <span class="f">scopeFilter</span>(Builder <span class="v">$builder</span>, <span class="k">array</span> <span class="v">$data</span>): Builder {
+  <span class="v">$className</span> = <span class="s">'App\\Filters\\'</span>.<span class="f">class_basename</span>(<span class="v">$this</span>).<span class="s">'Filter'</span>;
+  <span class="c">// Post → App\\Filters\\PostFilter</span>
+  <span class="k">return</span> (<span class="k">new</span> <span class="v">$className</span>)-><span class="f">apply</span>(<span class="v">$builder</span>, <span class="v">$data</span>);
+}`
+  },
+  {
+    node: "postfilter", title: "7 · new PostFilter",
+    desc: "Создаётся конкретный <code>PostFilter</code>. Его единственная «данные»-часть — свойство <code>$keys</code>: <b>белый список</b> атрибутов, по которым вообще разрешена фильтрация. Логику применения он не переопределяет.",
+    code: `<span class="k">class</span> <span class="f">PostFilter</span> <span class="k">extends</span> AbstractFilter {
+  <span class="k">protected array</span> <span class="v">$keys</span> = [
+    <span class="s">'id'</span>, <span class="s">'author_id'</span>, <span class="s">'category_id'</span>, <span class="s">'category_title'</span>,
+    <span class="s">'title'</span>, <span class="s">'content'</span>, <span class="s">'status'</span>, <span class="s">'published_at_from'</span>, <span class="c">/*…*/</span>
+  ];
+}`
+  },
+  {
+    node: "abstract", title: "8-9 · AbstractFilter::apply() — диспетчер",
+    desc: "<code>apply()</code> определён в родителе <code>AbstractFilter</code>. Он <b>перебирает $keys</b> (а не ключи запроса!), для каждого проверяет <code>isset($data[$key])</code> и, если параметр пришёл, вызывает одноимённый метод (<code>Str::camel($key)</code>). Сам условий не строит — раздаёт вызовы.",
+    code: `<span class="k">public function</span> <span class="f">apply</span>(Builder <span class="v">$builder</span>, <span class="k">array</span> <span class="v">$data</span>): Builder {
+  <span class="k">foreach</span> (<span class="v">$this</span>->keys <span class="k">as</span> <span class="v">$key</span>) {
+    <span class="k">if</span> (<span class="f">isset</span>(<span class="v">$data</span>[<span class="v">$key</span>])) {
+      <span class="v">$methodName</span> = Str::<span class="f">camel</span>(<span class="v">$key</span>);
+      <span class="v">$this</span>->{<span class="v">$methodName</span>}(<span class="v">$builder</span>, <span class="v">$data</span>[<span class="v">$key</span>]);
+    }
+  }
+  <span class="k">return</span> <span class="v">$builder</span>;
+}`
+  },
+  {
+    node: "methods", title: "10 · Методы-условия PostFilter",
+    desc: "Каждый метод в PostFilter добавляет своё условие в <b>тот же</b> <code>$builder</code>. Обратите внимание на разнообразие: точное сравнение, <code>ilike</code> для текста, <code>whereRelation</code> для связанной категории, диапазоны дат <code>&gt;=/&lt;=</code>.",
+    code: `<span class="k">protected function</span> <span class="f">title</span>(Builder <span class="v">$b</span>, <span class="k">string</span> <span class="v">$v</span>): <span class="k">void</span> {
+  <span class="v">$b</span>-><span class="f">where</span>(<span class="s">'title'</span>, <span class="s">'ilike'</span>, <span class="s">"%{$v}%"</span>);
+}
+<span class="k">protected function</span> <span class="f">categoryTitle</span>(Builder <span class="v">$b</span>, <span class="k">string</span> <span class="v">$v</span>): <span class="k">void</span> {
+  <span class="v">$b</span>-><span class="f">whereRelation</span>(<span class="s">'category'</span>, <span class="s">'title'</span>, <span class="s">'ilike'</span>, <span class="s">"%{$v}%"</span>);
+}
+<span class="k">protected function</span> <span class="f">publishedAtFrom</span>(Builder <span class="v">$b</span>, <span class="k">string</span> <span class="v">$v</span>): <span class="k">void</span> {
+  <span class="v">$b</span>-><span class="f">where</span>(<span class="s">'published_at'</span>, <span class="s">'>='</span>, <span class="v">$v</span>);
+}`
+  },
+  {
+    node: "get", title: "11 · get() выполняет запрос",
+    desc: "Тот же <code>$builder</code>, теперь с накопленными <code>where</code>, возвращается по цепочке в контроллер. <code>get()</code> выполняет SQL и отдаёт <code>Collection&lt;Post&gt;</code>. <code>category</code> уже подгружена через <code>with()</code>.",
+    code: `<span class="v">$posts</span> = <span class="v">$builder</span>-><span class="f">get</span>();
+<span class="c">// SELECT * FROM posts WHERE … + подгруженная category</span>`
+  },
+  {
+    node: "resource", title: "12 · PostResource → resolve() → JSON",
+    desc: "Коллекция оборачивается в <code>PostResource::collection()</code>, который приводит каждую модель к нужной форме (<code>whenLoaded('category')</code> отдаёт категорию, только если она загружена). <code>resolve()</code> превращает ресурс в массив — Laravel сериализует его в JSON.",
+    code: `<span class="k">return</span> PostResource::<span class="f">collection</span>(<span class="v">$posts</span>)-><span class="f">resolve</span>();
+
+<span class="c">// PostResource::toArray()</span>
+<span class="k">return</span> [
+  <span class="s">'id'</span> => <span class="v">$this</span>->id,
+  <span class="s">'title'</span> => <span class="v">$this</span>->title,
+  <span class="s">'category'</span> => CategoryResource::<span class="f">make</span>(<span class="v">$this</span>-><span class="f">whenLoaded</span>(<span class="s">'category'</span>)),
+];`
+  }
+];
+
+// ---------- FILTER PARAMS (from PostFilter) ----------
+const paramDefs = [
+  { key: "id",                clause: `<span class="q">->where</span>(<span class="a">'id'</span>, (int) 5)` },
+  { key: "author_id",         clause: `<span class="q">->where</span>(<span class="a">'author_id'</span>, (int) 12)` },
+  { key: "category_id",       clause: `<span class="q">->where</span>(<span class="a">'category_id'</span>, (int) 3)` },
+  { key: "category_title",    clause: `<span class="q">->whereRelation</span>(<span class="a">'category'</span>, <span class="a">'title'</span>, <span class="m">'ilike'</span>, <span class="a">'%news%'</span>)` },
+  { key: "title",             clause: `<span class="q">->where</span>(<span class="a">'title'</span>, <span class="m">'ilike'</span>, <span class="a">'%laravel%'</span>)` },
+  { key: "content",           clause: `<span class="q">->where</span>(<span class="a">'content'</span>, <span class="m">'ilike'</span>, <span class="a">'%eloquent%'</span>)` },
+  { key: "status",            clause: `<span class="q">->where</span>(<span class="a">'status'</span>, (int) 1)` },
+  { key: "published_at_from", clause: `<span class="q">->where</span>(<span class="a">'published_at'</span>, <span class="m">'>='</span>, <span class="a">'2026-01-01 00:00:00'</span>)` },
+  { key: "published_at_to",   clause: `<span class="q">->where</span>(<span class="a">'published_at'</span>, <span class="m">'<='</span>, <span class="a">'2026-07-09 00:00:00'</span>)` }
+];
+
+// ---------- PRESETS ----------
+const presets = {
+  "Полный обход (1→12)": { step: 0, params: ["title","category_id"] },
+  "Только текстовый поиск": { step: 8, params: ["title","content"] },
+  "Поиск по связи": { step: 8, params: ["category_title"] },
+  "Диапазон дат": { step: 8, params: ["published_at_from","published_at_to"] },
+  "Магия scope (5-6)": { step: 4, params: ["title","category_id"] }
+};
+
+// ---------- STATE ----------
+const state = {
+  step: 0,
+  params: new Set(["title", "category_id"]),
+  knowledge: {} // node -> know|fuzzy|unknown
+};
+let playTimer = null;
+
+// ---------- DOM ----------
+const flow = document.getElementById("flow");
+const nodesEls = [...flow.querySelectorAll("[data-node]")];
+const dTitle = document.getElementById("dTitle");
+const dDesc = document.getElementById("dDesc");
+const dCode = document.getElementById("dCode");
+const count = document.getElementById("count");
+const knowBtns = document.getElementById("knowBtns");
+const paramsEl = document.getElementById("params");
+const sqlBox = document.getElementById("sqlBox");
+const promptOut = document.getElementById("promptOut");
+const presetsEl = document.getElementById("presets");
+
+// build presets
+Object.keys(presets).forEach(name => {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.onclick = () => {
+    const p = presets[name];
+    state.step = p.step;
+    state.params = new Set(p.params);
+    stopPlay();
+    renderParams(); renderAll();
+  };
+  presetsEl.appendChild(b);
+});
+
+// build params
+paramDefs.forEach(p => {
+  const l = document.createElement("label");
+  l.innerHTML = `<input type="checkbox" value="${p.key}"> ${p.key}`;
+  const cb = l.querySelector("input");
+  cb.onchange = () => {
+    if (cb.checked) { state.params.add(p.key); } else { state.params.delete(p.key); }
+    renderParams(); renderSql(); updatePrompt();
+  };
+  paramsEl.appendChild(l);
+});
+
+function renderParams() {
+  paramsEl.querySelectorAll("label").forEach(l => {
+    const cb = l.querySelector("input");
+    cb.checked = state.params.has(cb.value);
+    l.classList.toggle("on", cb.checked);
+  });
+}
+
+// clicking nodes -> jump to matching step (first step for that node)
+nodesEls.forEach(el => {
+  el.onclick = () => {
+    const node = el.dataset.node;
+    const idx = steps.findIndex(s => s.node === node);
+    if (idx >= 0) { state.step = idx; stopPlay(); renderAll(); }
+  };
+});
+
+// knowledge buttons
+knowBtns.querySelectorAll("button").forEach(b => {
+  b.onclick = () => {
+    const node = steps[state.step].node;
+    const k = b.dataset.k;
+    if (state.knowledge[node] === k) { delete state.knowledge[node]; }
+    else { state.knowledge[node] = k; }
+    renderKnowBtns(); updatePrompt();
+  };
+});
+
+document.getElementById("prev").onclick = () => { stopPlay(); state.step = (state.step - 1 + steps.length) % steps.length; renderAll(); };
+document.getElementById("next").onclick = () => { stopPlay(); state.step = (state.step + 1) % steps.length; renderAll(); };
+document.getElementById("play").onclick = togglePlay;
+
+function togglePlay() {
+  if (playTimer) { stopPlay(); return; }
+  document.getElementById("play").textContent = "⏸ Пауза";
+  playTimer = setInterval(() => {
+    state.step = (state.step + 1) % steps.length;
+    renderAll();
+    if (state.step === steps.length - 1) { stopPlay(); }
+  }, 2000);
+}
+function stopPlay() {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  document.getElementById("play").textContent = "▶ Проиграть";
+}
+
+// keyboard
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight") { document.getElementById("next").click(); }
+  if (e.key === "ArrowLeft") { document.getElementById("prev").click(); }
+});
+
+// ---------- RENDER ----------
+function renderDiagram() {
+  const activeNode = steps[state.step].node;
+  nodesEls.forEach(el => {
+    el.classList.toggle("active", el.dataset.node === activeNode);
+  });
+}
+
+function renderDetail() {
+  const s = steps[state.step];
+  dTitle.textContent = s.title;
+  dDesc.innerHTML = s.desc;
+  dCode.innerHTML = s.code;
+  count.textContent = `${state.step + 1} / ${steps.length}`;
+  renderKnowBtns();
+}
+
+function renderKnowBtns() {
+  const node = steps[state.step].node;
+  const cur = state.knowledge[node];
+  knowBtns.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("on", b.dataset.k === cur);
+  });
+}
+
+function renderSql() {
+  const active = paramDefs.filter(p => state.params.has(p.key));
+  let html = `<span class="drop">Post::query()</span>`;
+  if (active.length === 0) {
+    html += `\n  <span class="empty">// ни один параметр не пришёл — apply() не добавляет условий</span>`;
+  } else {
+    active.forEach(p => {
+      html += `\n  ${p.clause}   <span class="drop">// key '${p.key}' есть в \$data</span>`;
+    });
+  }
+  html += `\n<span class="drop">->with('category')->get();</span>`;
+  sqlBox.innerHTML = html;
+}
+
+function updatePrompt() {
+  const label = { know: "уже понимаю", fuzzy: "разбираю", unknown: "пока не понимаю" };
+  const groups = { unknown: [], fuzzy: [], know: [] };
+  steps.forEach(s => {
+    const k = state.knowledge[s.node];
+    if (k) { groups[k].push(s.title.replace(/^[\d\s·-]+/, "")); }
+  });
+
+  const parts = [];
+  parts.push("Объясни, как в Laravel устроен фильтр постов (Line): путь GET-запроса от контроллера PostController@index через Post::query()->filter(), локальный scope scopeFilter() в trait HasFilter, класс PostFilter extends AbstractFilter и метод apply(), до get() и PostResource::collection()->resolve().");
+
+  if (groups.unknown.length) {
+    parts.push(`\n\nСовсем не понимаю и прошу разобрать детально: ${groups.unknown.join("; ")}.`);
+  }
+  if (groups.fuzzy.length) {
+    parts.push(`\nПонимаю нечётко, уточни: ${groups.fuzzy.join("; ")}.`);
+  }
+  if (groups.know.length) {
+    parts.push(`\nЭто уже понятно, можно кратко: ${groups.know.join("; ")}.`);
+  }
+
+  if (state.params.size) {
+    parts.push(`\n\nПокажи на примере запроса с параметрами ${[...state.params].join(", ")}, какие where/whereRelation добавит apply() и почему перебор идёт по белому списку $keys, а не по ключам запроса.`);
+  }
+  if (!groups.unknown.length && !groups.fuzzy.length && !groups.know.length) {
+    parts.push(`\n\nОсобенно интересует «магия» Builder::__call → scopeFilter: почему filter() находится, хотя на Builder такого метода нет.`);
+  }
+  promptOut.textContent = parts.join("");
+}
+
+function renderAll() {
+  renderDiagram();
+  renderDetail();
+  renderSql();
+  updatePrompt();
+}
+
+// copy
+document.getElementById("copyBtn").onclick = () => {
+  navigator.clipboard.writeText(promptOut.textContent).then(() => {
+    const b = document.getElementById("copyBtn");
+    b.textContent = "Скопировано!"; b.classList.add("copied");
+    setTimeout(() => { b.textContent = "Копировать"; b.classList.remove("copied"); }, 1400);
+  });
+};
+
+// init
+renderParams();
+renderAll();
+</script>

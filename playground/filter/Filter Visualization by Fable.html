@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filter Visualization</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --panel:#ffffff; --panel2:#fbfcfe; --border:#e2e8f0; --border2:#cbd5e1;
+    --text:#1e293b; --dim:#64748b; --dim2:#94a3b8;
+    --blue:#2563eb; --green:#059669; --orange:#ea580c; --amber:#d97706;
+    --purple:#7c3aed; --pink:#db2777; --teal:#0d9488; --cyan:#0284c7; --gray:#64748b;
+    --mono:ui-monospace,'Cascadia Code',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:13px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; gap:16px; padding:10px 16px;
+    border-bottom:1px solid var(--border); background:var(--panel); flex:none;
+  }
+  header h1{font-size:15px; font-weight:650; color:#0f172a}
+  header .logo{flex:none; display:block}
+  header .sub{font-size:11px; color:var(--dim)}
+  header .spacer{flex:1}
+  .hbtn{
+    padding:6px 12px; border:1px solid var(--border2); border-radius:8px;
+    font-size:12px; color:var(--text); background:var(--panel);
+  }
+  .hbtn:hover{border-color:var(--dim); background:#f8fafc}
+
+  /* ---------- layout ---------- */
+  main{flex:1; display:flex; min-height:0}
+  .sidebar{
+    width:284px; flex:none; overflow-y:auto; padding:12px;
+    border-right:1px solid var(--border); background:var(--panel2);
+  }
+  body.side-collapsed .sidebar{display:none}
+  .canvas-wrap{flex:1; min-width:320px; position:relative; display:flex; flex-direction:column; background:var(--bg)}
+  .steppanel{
+    width:398px; flex:none; overflow-y:auto; border-left:1px solid var(--border);
+    background:var(--panel2); display:flex; flex-direction:column;
+  }
+
+  /* ---------- sidebar ---------- */
+  .side-sec{margin-bottom:18px}
+  .side-sec h3{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--dim2); margin-bottom:8px; font-weight:650;
+  }
+  .presets{display:flex; flex-wrap:wrap; gap:6px}
+  .preset{
+    padding:5px 10px; font-size:11.5px; border:1px solid var(--border2);
+    border-radius:14px; color:var(--dim); background:var(--panel);
+  }
+  .preset:hover{color:var(--text); border-color:var(--dim)}
+  .preset.active{color:#1d4ed8; border-color:var(--blue); background:rgba(37,99,235,.08)}
+
+  .param{
+    display:flex; align-items:center; gap:7px; padding:5px 6px; border-radius:8px; margin-bottom:2px;
+  }
+  .param:hover{background:rgba(15,23,42,.035)}
+  .param input[type=checkbox]{accent-color:var(--blue); width:14px; height:14px; flex:none; cursor:pointer}
+  .param .k{font-family:var(--mono); font-size:11px; width:104px; flex:none; color:var(--dim); cursor:pointer}
+  .param.on .k{color:var(--cyan); font-weight:600}
+  .param input[type=text], .param select{
+    flex:1; min-width:0; background:var(--panel); border:1px solid var(--border2); color:var(--text);
+    border-radius:6px; padding:3px 7px; font:11px var(--mono);
+  }
+  .param input[type=text]:disabled, .param select:disabled{opacity:.45; background:#f1f5f9}
+  .param input[type=text]:focus, .param select:focus{outline:none; border-color:var(--blue)}
+  .side-note{font-size:11px; color:var(--dim); margin-top:8px; line-height:1.45}
+  .side-note code{font-family:var(--mono); font-size:10.5px; color:#475569; background:rgba(100,116,139,.1); padding:0 4px; border-radius:4px}
+
+  /* ---------- canvas ---------- */
+  .canvas-tools{
+    position:absolute; top:10px; right:12px; z-index:5; display:flex; gap:6px;
+  }
+  .ctool{
+    width:30px; height:30px; border:1px solid var(--border2); border-radius:8px;
+    background:rgba(255,255,255,.95); color:var(--dim); font-size:14px;
+    box-shadow:0 1px 3px rgba(15,23,42,.08);
+  }
+  .ctool:hover{color:#0f172a; border-color:var(--dim)}
+  .side-toggle{position:absolute; top:10px; left:12px; z-index:5}
+  .canvas-scroll{flex:1; overflow:auto; padding:12px 16px 90px; cursor:grab}
+  .canvas-scroll.panning{cursor:grabbing; user-select:none}
+  svg#diagram{display:block; margin:0 auto}
+  .legend{
+    position:absolute; left:12px; bottom:12px; z-index:5;
+    background:rgba(255,255,255,.95); border:1px solid var(--border); border-radius:10px;
+    padding:9px 12px; font-size:10.5px; color:var(--dim);
+    box-shadow:0 2px 8px rgba(15,23,42,.07);
+  }
+  .legend .li{display:flex; align-items:center; gap:8px; margin:3px 0}
+  .legend svg{flex:none}
+
+  /* ---------- svg pieces ---------- */
+  .node{cursor:pointer}
+  .node rect.body{transition:filter .25s, opacity .25s}
+  .node:hover rect.body{filter:brightness(.965) saturate(1.25)}
+  .node text{pointer-events:none}
+  .n-title{font:600 13px system-ui,sans-serif; fill:#1e293b}
+  .n-sub{font:10px var(--mono); fill:#64748b}
+  .n-chip{font:600 9.5px var(--mono)}
+  .conn path{fill:none; transition:opacity .25s}
+  .conn text{font:10.5px var(--mono); paint-order:stroke; stroke:#f5f7fa; stroke-width:4px; stroke-linejoin:round; pointer-events:none}
+  .conn .badge-t{font:700 10px system-ui; fill:#fff; stroke:none}
+  .badge-g{cursor:pointer; transform-box:fill-box; transform-origin:center; transition:transform .15s}
+  .badge-g:hover{transform:scale(1.22)}
+  .zone-label{font:650 10.5px system-ui; letter-spacing:.08em; text-transform:uppercase; fill:#94a3b8}
+  .dimmed{opacity:.22}
+  .active-conn path.main{filter:drop-shadow(0 0 3px rgba(15,23,42,.3))}
+  .active-node rect.body{filter:drop-shadow(0 0 7px rgba(37,99,235,.45))}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.28)}}
+  .active-conn .badge-c{animation:pulse 1.1s ease-in-out infinite; transform-box:fill-box; transform-origin:center}
+
+  /* ---------- tooltip ---------- */
+  .tooltip{
+    position:fixed; z-index:60; width:380px; max-width:92vw; max-height:70vh; overflow:hidden;
+    background:var(--panel); border:1px solid var(--border2); border-radius:12px;
+    box-shadow:0 14px 44px rgba(15,23,42,.2); padding:12px 14px;
+    pointer-events:none; opacity:0; transition:opacity .12s;
+  }
+  .tooltip.show{opacity:1}
+  .tooltip.pinned{
+    pointer-events:auto; overflow-y:auto;
+    border-color:var(--blue); box-shadow:0 14px 44px rgba(37,99,235,.28);
+  }
+  .tooltip h3{font-size:13.5px; margin-bottom:2px; color:#0f172a}
+  .tooltip .t-file{font:10.5px var(--mono); color:var(--dim2); margin-bottom:7px}
+  .tooltip .t-desc{font-size:12px; color:#475569; line-height:1.5}
+
+  /* ---------- step panel ---------- */
+  .step-nav{
+    display:flex; align-items:center; gap:8px; padding:10px 14px;
+    border-bottom:1px solid var(--border); flex:none;
+  }
+  .snav{
+    width:30px; height:30px; border:1px solid var(--border2); border-radius:8px;
+    background:var(--panel); color:var(--text); font-size:14px;
+  }
+  .snav:hover:not(:disabled){border-color:var(--blue); color:var(--blue)}
+  .snav:disabled{opacity:.3; cursor:default}
+  .step-count{font-size:12px; color:var(--dim); flex:1; text-align:center}
+  .step-count b{color:var(--text)}
+  .step-dots{display:flex; gap:4px; padding:9px 14px 2px; flex-wrap:wrap; flex:none}
+  .dot{width:17px; height:8px; border-radius:4px; background:#dbe2ec; transition:background .2s}
+  .dot:hover{background:var(--dim2)}
+  .dot.on{background:var(--blue)}
+  .dot.done{background:#93c5fd}
+  .step-content{padding:12px 16px 24px; overflow-y:auto}
+  .step-content h2{font-size:14.5px; margin-bottom:8px; line-height:1.35; color:#0f172a}
+  .step-content h2 .stepno{color:var(--blue); font-family:var(--mono); font-size:12.5px; margin-right:6px}
+  .step-content p{font-size:12.5px; color:#475569; margin-bottom:9px}
+  .step-content code, .kv code, .tooltip code{
+    font-family:var(--mono); font-size:11px; background:rgba(100,116,139,.12);
+    padding:1px 5px; border-radius:4px; color:#334155;
+  }
+  .snippet{
+    background:#f8fafc; border:1px solid var(--border); border-radius:9px;
+    padding:10px 12px; margin:4px 0 10px; overflow-x:auto;
+  }
+  .snippet .fname{font:10px var(--mono); color:var(--dim2); margin-bottom:6px}
+  .snippet pre{font:11px/1.55 var(--mono); color:#334155; white-space:pre}
+  .snippet .hl{background:rgba(37,99,235,.13); border-radius:3px; padding:1px 0; box-shadow:0 0 0 3px rgba(37,99,235,.13)}
+  .snippet .cm{color:#94a3b8}
+  .tooltip .snippet{margin:9px 0 0}
+  .dyn{margin-top:2px}
+  .dyn h4{font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--dim2); margin:10px 0 6px}
+  .kv{
+    background:#f8fafc; border:1px solid var(--border); border-radius:9px; padding:9px 12px;
+    font:11px/1.6 var(--mono); color:#334155; overflow-x:auto; white-space:pre;
+  }
+  .kv .mut{color:#94a3b8}
+  .kv .acc{color:#0369a1}
+  .kv .accg{color:#047857}
+  .kv .acco{color:#c2410c}
+  table.map{width:100%; border-collapse:collapse; font:11px var(--mono)}
+  table.map td{padding:3.5px 6px; border-bottom:1px solid #eef2f7; vertical-align:top}
+  table.map tr.hit td{color:#047857}
+  table.map tr.miss td{color:#94a3b8}
+  table.map .arr{color:var(--dim2); padding:0 2px}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:1240px){ .steppanel{width:340px} .sidebar{width:250px} }
+  @media (max-width:1020px){
+    main{flex-direction:column; overflow-y:auto}
+    .sidebar,.steppanel{width:auto; border:none; border-bottom:1px solid var(--border)}
+    .canvas-wrap{min-height:520px; order:-1}
+    body{overflow:auto}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg class="logo" width="38" height="32" viewBox="0 0 118 100" aria-hidden="true">
+    <path d="M14 8 H30 V56 Q30 66 40 66 H58 V82 H36 Q14 82 14 60 Z" fill="#662D91"/>
+    <path d="M97.2 23.8 A30 30 0 1 0 97.2 66.2" fill="none" stroke="#fff" stroke-width="21"/>
+    <path d="M97.2 23.8 A30 30 0 1 0 97.2 66.2" fill="none" stroke="#F80000" stroke-width="14"/>
+  </svg>
+  <div>
+    <h1>Filter Visualization</h1>
+    <div class="sub">Как <b>GET /api/posts</b> превращается в SQL и JSON — фильтр постов · Урок 13 «Filters»</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnReset">Сброс сценария</button>
+</header>
+
+<main>
+  <!-- ============ левая панель: сценарий ============ -->
+  <aside class="sidebar">
+    <div class="side-sec">
+      <h3>Сценарий запроса</h3>
+      <div class="presets" id="presets"></div>
+    </div>
+    <div class="side-sec">
+      <h3>Параметры фильтра (query string)</h3>
+      <div id="params"></div>
+      <div class="side-note">
+        Это ключи из <code>PostFilter::$keys</code>. Ещё есть <code>img_path</code>,
+        <code>created_at_*</code>, <code>updated_at_*</code> — устроены так же, скрыты для компактности.
+        Схема пересчитывается на лету: URL, вызванные методы, SQL и JSON.
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ центр: схема ============ -->
+  <section class="canvas-wrap">
+    <button class="ctool side-toggle" id="btnSide" title="Свернуть панель сценария">◀</button>
+    <div class="canvas-tools">
+      <button class="ctool" id="zOut" title="Уменьшить">−</button>
+      <button class="ctool" id="zIn" title="Увеличить">+</button>
+      <button class="ctool" id="zFit" title="Вписать">⤢</button>
+      <button class="ctool" id="btnPlay" title="Автопроигрывание шагов">▶</button>
+    </div>
+    <div class="canvas-scroll" id="canvasScroll"><svg id="diagram"></svg></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- ============ правая панель: шаги ============ -->
+  <aside class="steppanel">
+    <div class="step-nav">
+      <button class="snav" id="sPrev">←</button>
+      <div class="step-count" id="sCount"></div>
+      <button class="snav" id="sNext">→</button>
+    </div>
+    <div class="step-dots" id="sDots"></div>
+    <div class="step-content" id="sContent"></div>
+  </aside>
+</main>
+
+<!-- ============ hover-подсказка узла ============ -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Filter Visualization by Fable — схема работы фильтра постов (Laravel)
+   Поток: GET /api/posts → IndexRequest → PostController::index()
+          → Post::query()->filter() → __call → scopeFilter (HasFilter)
+          → PostFilter (extends AbstractFilter) → apply() → where()
+          → with('category')->get() → PostResource → resolve() → JSON
+   ===================================================================== */
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const $  = s => document.querySelector(s);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const sq  = s => String(s).replace(/'/g, "''");
+
+/* ---------------- параметры фильтра (порядок = PostFilter::$keys) ---------------- */
+const PARAMS = [
+  {key:'id',                type:'number', def:'42',                  m:'id'},
+  {key:'author_id',         type:'number', def:'7',                   m:'authorId'},
+  {key:'category_id',       type:'number', def:'3',                   m:'categoryId'},
+  {key:'category_title',    type:'text',   def:'ново',                m:'categoryTitle'},
+  {key:'title',             type:'text',   def:'laravel',             m:'title'},
+  {key:'content',           type:'text',   def:'eloquent',            m:'content'},
+  {key:'status',            type:'select', def:'1',                   m:'status'},
+  {key:'published_at_from', type:'text',   def:'2026-01-01 00:00:00', m:'publishedAtFrom'},
+  {key:'published_at_to',   type:'text',   def:'2026-06-30 23:59:59', m:'publishedAtTo'},
+];
+
+const SQL_OF = {
+  id:                v => `"id" = ${parseInt(v)||0}`,
+  author_id:         v => `"author_id" = ${parseInt(v)||0}`,
+  category_id:       v => `"category_id" = ${parseInt(v)||0}`,
+  category_title:    v => `exists (select * from "categories"\n        where "posts"."category_id" = "categories"."id"\n          and "title" ilike '%${sq(v)}%')`,
+  title:             v => `"title" ilike '%${sq(v)}%'`,
+  content:           v => `"content" ilike '%${sq(v)}%'`,
+  status:            v => `"status" = ${parseInt(v)||0}`,
+  published_at_from: v => `"published_at" >= '${sq(v)}'`,
+  published_at_to:   v => `"published_at" <= '${sq(v)}'`,
+};
+
+const METHOD_SRC = {
+  id:                "protected function id(Builder $builder, int|string $value): void {\n    $builder->where('id', (int) $value);\n}",
+  author_id:         "protected function authorId(Builder $builder, int|string $value): void {\n    $builder->where('author_id', (int) $value);\n}",
+  category_id:       "protected function categoryId(Builder $builder, int|string $value): void {\n    $builder->where('category_id', (int) $value);\n}",
+  category_title:    "protected function categoryTitle(Builder $builder, string $value): void {\n    $builder->whereRelation('category', 'title', 'ilike', \"%{$value}%\");\n}",
+  title:             "protected function title(Builder $builder, string $value): void {\n    $builder->where('title', 'ilike', \"%{$value}%\");\n}",
+  content:           "protected function content(Builder $builder, string $value): void {\n    $builder->where('content', 'ilike', \"%{$value}%\");\n}",
+  status:            "protected function status(Builder $builder, int|string $value): void {\n    $builder->where('status', (int) $value);\n}",
+  published_at_from: "protected function publishedAtFrom(Builder $builder, string $value): void {\n    $builder->where('published_at', '>=', $value);\n}",
+  published_at_to:   "protected function publishedAtTo(Builder $builder, string $value): void {\n    $builder->where('published_at', '<=', $value);\n}",
+};
+
+const PRESETS = [
+  {name:'Без фильтров',        on:{}},
+  {name:'Поиск по заголовку',  on:{title:'laravel'}},
+  {name:'Категория + статус',  on:{category_id:'3', status:'1'}},
+  {name:'За период',           on:{published_at_from:'2026-01-01 00:00:00', published_at_to:'2026-06-30 23:59:59'}},
+  {name:'Комбо',               on:{title:'laravel', category_title:'ново', status:'1', published_at_from:'2026-01-01 00:00:00'}},
+];
+const DEFAULT_PRESET = 1;
+
+/* ---------------- состояние ---------------- */
+const state = {
+  step: 0,
+  zoom: 1,
+  params: {},   // key -> {on, value}
+};
+PARAMS.forEach(p => state.params[p.key] = {on:false, value:p.def});
+
+function applyPreset(i){
+  const pr = PRESETS[i];
+  PARAMS.forEach(p => {
+    const v = pr.on[p.key];
+    state.params[p.key].on = v !== undefined;
+    if (v !== undefined) state.params[p.key].value = v;
+  });
+  state.activePreset = i;
+}
+applyPreset(DEFAULT_PRESET);
+
+const activeParams = () => PARAMS.filter(p => state.params[p.key].on && String(state.params[p.key].value).trim() !== '');
+const val = k => String(state.params[k].value).trim();
+
+function buildUrl(){
+  const a = activeParams();
+  if (!a.length) return '/api/posts';
+  return '/api/posts?' + a.map(p => `${p.key}=${val(p.key)}`).join('&');
+}
+function buildWhere(){
+  return activeParams().map(p => SQL_OF[p.key](val(p.key)));
+}
+function buildSql(){
+  const w = buildWhere();
+  let s = 'select * from "posts"';
+  if (w.length) s += '\nwhere ' + w.join('\n  and ');
+  return s;
+}
+
+/* =====================================================================
+   УЗЛЫ СХЕМЫ (tip — фрагмент кода для hover-подсказки)
+   ===================================================================== */
+const NODES = [
+  {id:'client',    x:40,  y:30,   w:300, h:66, color:'blue',
+   title:'Клиент (Postman / фронтенд)', sub:['GET /api/posts?…'],
+   file:'HTTP-запрос',
+   desc:'Источник запроса. Параметры фильтра передаются в query string GET-запроса — не в JSON-теле. JSON появится только в ответе.',
+   tip: () => 'GET ' + buildUrl() + ' HTTP/1.1\nAccept: application/json'},
+
+  {id:'route',     x:40,  y:146,  w:300, h:58, color:'blue',
+   title:'routes/api.php', sub:["Route::apiResource('posts', …) → index"],
+   file:'routes/api.php',
+   desc:'apiResource регистрирует 5 REST-маршрутов. GET /api/posts направляется в PostController::index(). Префикс /api добавляется автоматически (bootstrap/app.php).',
+   tip: "Route::apiResource('posts', PostController::class);\n// GET /api/posts → PostController::index()"},
+
+  {id:'request',   x:40,  y:254,  w:300, h:58, color:'amber',
+   title:'IndexRequest — валидация', sub:['rules() для всех атрибутов Post'],
+   file:'app/Http/Requests/Api/Post/IndexRequest.php',
+   desc:'FormRequest. Laravel создаёт его до вызова index() и валидирует query-параметры по rules(). Невалидные данные → ответ 422, контроллер не запустится.',
+   tip: "public function rules(): array {\n    return [\n        'title'  => ['nullable', 'string', 'max:255'],\n        'status' => ['nullable', 'integer', Rule::in(…)],\n        'published_at_from' => ['nullable',\n            'date_format:Y-m-d H:i:s'],\n        // … правила для всех атрибутов Post\n    ];\n}"},
+
+  {id:'controller',x:40,  y:362,  w:300, h:58, color:'amber',
+   title:'PostController::index()', sub:['тонкий контроллер: 2 строки логики'],
+   file:'app/Http/Controllers/Api/PostController.php',
+   desc:'Получает $request->validated(), строит запрос через модель и отдаёт результат через PostResource. Вся логика фильтрации вынесена из контроллера.',
+   tip: "public function index(IndexRequest $request): array {\n    $posts = Post::query()\n        ->filter($request->validated())\n        ->with('category')\n        ->get();\n\n    return PostResource::collection($posts)->resolve();\n}"},
+
+  {id:'builder',   x:40,  y:470,  w:300, h:84, color:'purple',
+   title:'Eloquent Builder', sub:['Post::query() → конструктор SQL', "->filter($data) ->with('category') ->get()"],
+   file:'Illuminate\\Database\\Eloquent\\Builder',
+   desc:'Конструктор запроса: копит условия where/with и выполняет SQL только на get(). Внутри хранит экземпляр модели ($builder->getModel()) — через него находит scope-методы.',
+   tip: "$posts = Post::query()      // → Eloquent\\Builder\n    ->filter($data)         // условия копятся…\n    ->with('category')\n    ->get();                // …SQL выполнится только здесь"},
+
+  {id:'post',      x:460, y:356,  w:260, h:74, color:'green',
+   title:'Модель Post', sub:['app/Models/Post.php'], chip:'use HasFilter',
+   file:'app/Models/Post.php',
+   desc:'Eloquent-модель. Подключает трейт HasFilter — поэтому у неё есть scopeFilter(), и builder находит его по соглашению имён named scope.',
+   tip: "class Post extends Model {\n    use HasFactory, HasFilter, HasLog;\n    // scopeFilter() «вклеен» трейтом —\n    // как будто написан прямо здесь.\n    // Соглашение scopeXxx() → xxx():\n    // на builder доступен как ->filter()\n}"},
+
+  {id:'trait',     x:770, y:356,  w:250, h:74, color:'green',
+   title:'trait HasFilter', sub:['scopeFilter($builder, $data)'],
+   file:'app/Models/Traits/HasFilter.php',
+   desc:'Переиспользуемый scope: строит имя класса фильтра из имени модели (class_basename) и делегирует работу его методу apply(). Подключи трейт в любую модель — получишь ->filter().',
+   tip: "// scopeXxx() → xxx(): этот метод\n// вызывается на builder как ->filter($data)\npublic function scopeFilter(Builder $builder, array $data): Builder {\n    $className = 'App\\\\Filters\\\\'\n        .class_basename($this).'Filter';\n\n    return (new $className)->apply($builder, $data);\n}"},
+
+  {id:'abstract',  x:460, y:560,  w:260, h:74, color:'orange',
+   title:'AbstractFilter', sub:['apply(): foreach по $keys'],
+   file:'app/Filters/AbstractFilter.php',
+   desc:'Общий алгоритм фильтрации: пройтись по $keys → isset($data[$key]) → Str::camel → вызвать одноимённый метод наследника. Про конкретную модель не знает ничего.',
+   tip: "public function apply(Builder $builder, array $data): Builder {\n    foreach ($this->keys as $key) {\n        if (isset($data[$key])) {\n            $methodName = Str::camel($key);\n            $this->{$methodName}($builder, $data[$key]);\n        }\n    }\n\n    return $builder;\n}"},
+
+  {id:'postfilter',x:770, y:560,  w:250, h:74, color:'orange',
+   title:'PostFilter', sub:['$keys + методы-условия'], chipDyn:true,
+   file:'app/Filters/PostFilter.php',
+   desc:'Знает всё про фильтрацию постов: белый список $keys и по методу на каждый ключ. Методы protected (не private!), чтобы их видел apply() из родительского класса.',
+   tip: "class PostFilter extends AbstractFilter {\n    protected array $keys = ['id', 'author_id',\n        'category_id', 'category_title', 'title', …];\n\n    protected function title(Builder $builder, string $value): void {\n        $builder->where('title', 'ilike', \"%{$value}%\");\n    }\n    // … по методу на каждый ключ\n}"},
+
+  {id:'db',        x:40,  y:810,  w:300, h:62, color:'pink',
+   title:'PostgreSQL', sub:['база lc_line · таблица posts (+ categories)'],
+   file:'select * from "posts" where …',
+   desc:'Получает скомпилированный SQL. Оператор ilike — регистронезависимый LIKE, особенность PostgreSQL (в MySQL был бы like).',
+   tip: () => buildSql() + "\n\n-- + второй запрос от with('category'):\nselect * from \"categories\" where \"id\" in (…)"},
+
+  {id:'resource',  x:40,  y:922,  w:300, h:58, color:'teal',
+   title:'PostResource::collection()', sub:['toArray() для каждой модели'],
+   file:'app/Http/Resources/Post/PostResource.php',
+   desc:'API-ресурс: превращает каждую модель Post в массив нужной формы. category вкладывается через CategoryResource + whenLoaded — сработает, потому что была жадная загрузка with().',
+   tip: "public function toArray(Request $request): array {\n    return [\n        'id'     => $this->id,\n        'title'  => $this->title,\n        // … остальные атрибуты\n        'category' => CategoryResource::make(\n            $this->whenLoaded('category')),\n    ];\n}"},
+
+  {id:'json',      x:40,  y:1030, w:300, h:66, color:'blue',
+   title:'JSON-ответ клиенту', sub:['resolve() → array → JSON · 200 OK'],
+   file:'HTTP-ответ',
+   desc:'Итог index(): resolve() отдаёт готовый массив, Laravel сериализует его в JSON. Клиент получает отфильтрованный список постов.',
+   tip: '[\n  { "id": 12, "title": "…", "status": 1,\n    "category": { "id": 3, "title": "…" } },\n  { "id": 27, … }\n]'},
+];
+
+const COLORS = {
+  blue:  ['#dbeafe', '#93c5fd'],
+  amber: ['#fef3c7', '#fcd34d'],
+  purple:['#ede9fe', '#c4b5fd'],
+  green: ['#d1fae5', '#6ee7b7'],
+  orange:['#ffedd5', '#fdba74'],
+  pink:  ['#fce7f3', '#f9a8d4'],
+  teal:  ['#ccfbf1', '#5eead4'],
+};
+const TYPE_COLOR = {flow:'#2563eb', ret:'#059669', conv:'#ea580c', struct:'#64748b'};
+
+/* =====================================================================
+   СВЯЗИ: type flow|ret|conv|struct; step — на каком шаге подсвечивается
+   ===================================================================== */
+const CONNS = [
+  {step:1,  from:'client',     to:'route',      type:'flow',   label:'HTTP GET + query string', lp:'right'},
+  {step:2,  from:'route',      to:'request',    type:'flow',   label:'валидация ДО контроллера', lp:'right'},
+  {step:3,  from:'request',    to:'controller', type:'flow',   label:'$request->validated() → $data', lp:'right'},
+  {step:4,  from:'controller', to:'builder',    type:'flow',   label:'Post::query()', lp:'right'},
+  {step:5,  from:'builder',    to:'post',       type:'conv',   label:'filter()? нет → __call → ищем scope', lp:'above',
+   path:'M340,505 C405,505 393,393 460,393'},
+  {step:6,  from:'post',       to:'trait',      type:'struct', label:'use HasFilter → scopeFilter()', lp:'above', ldy:-44,
+   path:'M720,393 C740,393 750,393 770,393'},
+  {step:7,  from:'trait',      to:'postfilter', type:'conv',   label:"'App\\\\Filters\\\\'.class_basename.'Filter'", lp:'left',
+   path:'M895,430 C895,485 895,505 895,560'},
+  {step:8,  from:'postfilter', to:'abstract',   type:'struct', label:'extends — apply() в родителе', lp:'above', ldy:-32,
+   path:'M770,586 C752,572 738,572 720,586'},
+  {step:9,  from:'abstract',   to:'postfilter', type:'conv',   label:'foreach: $this->{camel($key)}()', lp:'below', ldy:34,
+   path:'M720,616 C738,630 752,630 770,616'},
+  {step:10, from:'abstract',   to:'builder',    type:'ret',    label:'where(…) копятся → return $builder', lp:'left', t:.42,
+   path:'M460,612 C398,614 372,560 340,540'},
+  {step:11, from:'builder',    to:'db',         type:'flow',   label:"->with('category')->get() → SQL", lp:'right'},
+  {step:12, from:'db',         to:'resource',   type:'ret',    label:'Collection&lt;Post&gt;', lp:'right'},
+  {step:13, from:'resource',   to:'json',       type:'ret',    label:'resolve() → array', lp:'right'},
+];
+
+/* =====================================================================
+   ШАГИ (0 = обзор). У каждого: заголовок, текст, код, динамика
+   ===================================================================== */
+const FILE = f => `<div class="fname">${f}</div>`;
+
+const steps = [
+{ title:'Обзор схемы', nodes:[], conns:[],
+  html:`<p>Слева — <b>поток запроса</b> сверху вниз: от HTTP-запроса до JSON-ответа. Справа в рамке — <b>механика фильтра</b>: модель, трейт и классы фильтров, через которые поток «проходит» на шагах 5–10.</p>
+  <p>Цвета стрелок: <span style="color:#2563eb">синие</span> — движение запроса, <span style="color:#059669">зелёные</span> — возврат результата, <span style="color:#ea580c">оранжевые пунктирные</span> — «магия» соглашений имён Laravel (их тут три!), <span style="color:#64748b">серые пунктирные</span> — структурные связи классов (<code>use</code>, <code>extends</code>).</p>
+  <p>Жми <b>→</b> (или стрелки на клавиатуре), чтобы пройти все 13 шагов. Кружок с номером на стрелке кликабелен — сразу перейдёшь к этому шагу. Наведи курсор на любой узел: всплывёт подсказка с его ролью и кодом. Клик по узлу закрепит подсказку — код можно выделить и скопировать; клик в любом другом месте закроет её. Пустое место схемы можно перетаскивать мышью, а простой клик по нему сбрасывает сценарий к исходному.</p>
+  <p>Слева можно менять сценарий запроса (панель сворачивается кнопкой ◀) — URL, вызванные методы, SQL и JSON пересчитаются на лету.</p>` },
+
+{ title:'GET-запрос с query-параметрами', nodes:['client','route'], conns:[1],
+  code:{f:'routes/api.php', s:`<span class="hl">Route::apiResource('posts', PostController::class);</span>
+<span class="cm">// GET /api/posts → PostController::index()</span>
+<span class="cm">// префикс /api добавляется в bootstrap/app.php</span>`},
+  dyn:'url',
+  html:`<p>Клиент (Postman из домашки, браузер, фронтенд) вызывает <code>GET /api/posts</code>. Параметры фильтра передаются в <b>query string</b> — в адресной строке, а не в JSON-теле; JSON будет только в <i>ответе</i>. <code>Route::apiResource</code> сопоставляет метод и путь действию <code>index</code>.</p>` },
+
+{ title:'Валидация: IndexRequest — до контроллера', nodes:['request'], conns:[2],
+  code:{f:'app/Http/Requests/Api/Post/IndexRequest.php', s:`public function rules(): array {
+    return [
+        'title'  => ['nullable', 'string', 'max:255'],
+        'status' => ['nullable', 'integer', Rule::in(array_keys(Post::getStatuses()))],
+        'published_at_from' => ['nullable', 'date_format:Y-m-d H:i:s'],
+        <span class="cm">// … правила для всех атрибутов Post</span>
+    ];
+}`},
+  html:`<p>Laravel видит тип-хинт <code>IndexRequest $request</code> в сигнатуре <code>index()</code>, создаёт объект через контейнер и запускает валидацию автоматически — <b>до</b> входа в метод контроллера. Невалидный параметр даст ответ 422, и <code>index()</code> даже не выполнится.</p>
+  <p>Все правила <code>nullable</code> — каждый фильтр необязателен.</p>` },
+
+{ title:'validated(): в фильтр идут чистые данные', nodes:['request','controller'], conns:[3],
+  code:{f:'app/Http/Controllers/Api/PostController.php', s:`public function index(IndexRequest $request): array {
+    $posts = Post::query()
+        ->filter(<span class="hl">$request->validated()</span>)  <span class="cm">// ← только проверенные ключи</span>
+        ->with('category')
+        ->get();
+
+    return PostResource::collection($posts)->resolve();
+}`},
+  dyn:'data',
+  html:`<p><code>validated()</code> возвращает массив только из ключей, описанных в <code>rules()</code> и прошедших проверку. Лишний мусор из query string (<code>?hack=1</code>) сюда не попадёт — первый уровень защиты, дальше будет ещё белый список <code>$keys</code>.</p>` },
+
+{ title:'Post::query() создаёт Builder', nodes:['controller','builder'], conns:[4],
+  code:{f:'app/Http/Controllers/Api/PostController.php', s:`$posts = <span class="hl">Post::query()</span>   <span class="cm">// → Illuminate\\Database\\Eloquent\\Builder</span>
+    ->filter($request->validated())
+    …`},
+  html:`<p>Статический вызов на модели возвращает <code>Eloquent\\Builder</code> — конструктор SQL. Он будет <b>копить</b> условия (where, with…) и не тронет базу, пока не вызовут <code>get()</code>.</p>
+  <p>Внутри builder хранится экземпляр модели — он доступен через <code>$builder->getModel()</code>. Эта связка builder ⇄ модель — ключ к следующему шагу.</p>` },
+
+{ title:'filter(): метода нет — работает __call', nodes:['builder','post'], conns:[5],
+  code:{f:'Illuminate\\Database\\Eloquent\\Builder (упрощённо)', s:`public function __call($method, $parameters) {
+    <span class="hl">if ($this->hasNamedScope($method)) {</span>      <span class="cm">// у модели есть scopeFilter()?</span>
+        <span class="hl">return $this->callNamedScope($method, $parameters);</span>
+    }
+    <span class="cm">// … остальная магия Builder</span>
+}`},
+  html:`<p>В классе Builder метода <code>filter()</code> нет. PHP вызывает <code>__call('filter', [...])</code>, и builder проверяет <b>модель</b>: <code>Post</code> умеет <code>scopeFilter</code>? Да! Builder вызывает его и передаёт <b>первым аргументом самого себя</b>, вторым — <code>$data</code>.</p>
+  <p><b>Соглашение имён №1:</b> <code>scopeXxx()</code> → <code>xxx()</code>. Метод, объявленный в модели с префиксом <code>scope</code>, доступен на builder без префикса и с маленькой буквы: <code>scopeFilter()</code> вызывается как <code>filter()</code>, <code>scopePublished()</code> — как <code>published()</code>.</p>
+  <p>Builder идёт обратным путём: к вызванному имени <code>filter</code> приписывает <code>scope</code>, получает <code>scopeFilter</code> и проверяет, есть ли такой метод у модели (<code>hasNamedScope</code>).</p>` },
+
+{ title:'scopeFilter() приходит из трейта HasFilter', nodes:['post','trait'], conns:[6],
+  code:{f:'app/Models/Post.php', s:`class Post extends Model {
+    use HasFactory, <span class="hl">HasFilter</span>, HasLog;   <span class="cm">// ← трейт подключён к модели</span>`},
+  html:`<p><code>use HasFilter</code> «вклеивает» <code>scopeFilter()</code> в класс Post — как будто метод написан прямо в нём. Трейт расширяет <b>модель</b>, а builder лишь находит этот метод через её named scope.</p>
+  <p>Трейт — переиспользуемый кусок класса: благодаря ему <code>->filter()</code> можно дать <b>любой</b> модели одной строкой, код не дублируется. Именно поэтому связь на схеме серая пунктирная: это структура классов, а не вызов.</p>` },
+
+{ title:'Соглашение имён: Post → PostFilter', nodes:['trait','postfilter'], conns:[7],
+  code:{f:'app/Models/Traits/HasFilter.php', s:`public function scopeFilter(Builder $builder, array $data): Builder {
+    <span class="hl">$className = 'App\\\\Filters\\\\'.class_basename($this).'Filter';</span>
+    <span class="cm">//           App\\Filters\\   +   Post   +   Filter</span>
+    return (new $className)->apply($builder, $data);
+}`},
+  html:`<p><code>class_basename($this)</code> берёт имя класса модели без namespace: из <code>App\\Models\\Post</code> получается <code>Post</code>. Итог — <code>App\\Filters\\PostFilter</code>. Создаётся объект, и у него вызывается <code>apply()</code>.</p>
+  <p><b>Соглашение имён №2:</b> <code>{Модель}Filter</code>. Подключишь трейт в <code>Profile</code> — он сам найдёт <code>ProfileFilter</code>. Convention over configuration: ноль настроек, вся связка — в имени.</p>` },
+
+{ title:'PostFilter extends AbstractFilter: apply() в родителе', nodes:['postfilter','abstract'], conns:[8],
+  code:{f:'app/Filters/PostFilter.php + AbstractFilter.php', s:`class PostFilter <span class="hl">extends AbstractFilter</span> {
+    protected array $keys = ['id', 'author_id', 'category_id',
+        'category_title', 'title', 'content', <span class="cm">/* … */</span>];
+}
+
+abstract class AbstractFilter {
+    public function <span class="hl">apply</span>(Builder $builder, array $data): Builder { … }
+}`},
+  html:`<p>Разделение ролей: <b>родитель</b> хранит общий алгоритм (<code>apply()</code>), <b>наследник</b> — конкретику: белый список <code>$keys</code> и методы-условия. Это паттерн «шаблонный метод». Фильтр для другой модели = новый класс с другими <code>$keys</code>, алгоритм не трогаем.</p>
+  <p>Поэтому методы условий <code>protected</code>, а не <code>private</code>: их вызывает код родительского класса.</p>` },
+
+{ title:'apply(): foreach по белому списку $keys', nodes:['abstract','postfilter'], conns:[9],
+  code:{f:'app/Filters/AbstractFilter.php', s:`public function apply(Builder $builder, array $data): Builder {
+    foreach ($this->keys as $key) {            <span class="cm">// белый список фильтра</span>
+        <span class="hl">if (isset($data[$key])) {</span>              <span class="cm">// ключ пришёл в запросе?</span>
+            $methodName = <span class="hl">Str::camel($key)</span>;    <span class="cm">// published_at_from → publishedAtFrom</span>
+            $this->{$methodName}($builder, $data[$key]);
+        }
+    }
+    return $builder;
+}`},
+  dyn:'map',
+  html:`<p><code>foreach</code> идёт по белому списку <code>$keys</code>, но условие добавляется <b>только</b> для ключей, реально пришедших в запросе — остальные отсеивает <code>isset($data[$key])</code>.</p>
+  <p><b>Соглашение имён №3:</b> ключ запроса в snake_case → метод в camelCase через <code>Str::camel</code>. Вызов <code>$this->{$methodName}(…)</code> — динамический: имя метода лежит в переменной.</p>` },
+
+{ title:'Методы-условия наполняют Builder и возвращают его', nodes:['abstract','postfilter','builder'], conns:[9,10],
+  dyn:'methods',
+  html:`<p>Каждый метод добавляет своё условие: точное совпадение (<code>where =</code>), поиск подстроки (<code>ilike</code>), диапазон дат (<code>&gt;=</code> / <code>&lt;=</code>) или условие по связи (<code>whereRelation('category', …)</code> — превратится в SQL <code>exists</code>).</p>
+  <p>Методы мутируют <b>тот же</b> builder, который приехал из контроллера, а <code>apply()</code> возвращает его же — цепочка вызовов в контроллере просто продолжается.</p>
+  <p>Обрати внимание: значения из query string приходят <b>строками</b> (<code>'1'</code>, а не <code>1</code>), поэтому параметры объявлены как <code>int|string</code> с кастом <code>(int)</code> — защита на случай <code>strict_types</code>.</p>` },
+
+{ title:"with('category') + get(): выполняется SQL", nodes:['builder','db'], conns:[11],
+  code:{f:'app/Http/Controllers/Api/PostController.php', s:`$posts = Post::query()
+    ->filter($request->validated())
+    ->with('category')   <span class="cm">// жадная загрузка — против N+1</span>
+    <span class="hl">->get();</span>              <span class="cm">// ← только ЗДЕСЬ выполняется SQL</span>`},
+  dyn:'sql',
+  html:`<p>До <code>get()</code> база не трогалась — builder ленивый. <code>get()</code> компилирует накопленные условия в SQL, выполняет его в PostgreSQL и возвращает <code>Collection</code> моделей Post.</p>
+  <p><code>with('category')</code> одним вторым запросом грузит категории всех постов — иначе <code>PostResource</code> делал бы отдельный запрос на каждый пост (проблема N+1).</p>` },
+
+{ title:'Collection оборачивается в PostResource', nodes:['db','resource'], conns:[12],
+  code:{f:'app/Http/Resources/Post/PostResource.php', s:`public function toArray(Request $request): array {
+    return [
+        'id'     => $this->id,
+        'title'  => $this->title,
+        <span class="cm">// … остальные атрибуты</span>
+        'category' => CategoryResource::make(<span class="hl">$this->whenLoaded('category')</span>),
+    ];
+}`},
+  html:`<p>Из базы вернулась <code>Collection&lt;Post&gt;</code>. <code>PostResource::collection($posts)</code> оборачивает её: каждая модель пройдёт через <code>toArray()</code> — это контракт формата ответа API, отдельный от модели.</p>
+  <p><code>whenLoaded('category')</code> вложит категорию только если она была жадно загружена — ещё одна защита от N+1.</p>` },
+
+{ title:'resolve(): массив → JSON-ответ', nodes:['resource','json'], conns:[13],
+  code:{f:'app/Http/Controllers/Api/PostController.php', s:`return <span class="hl">PostResource::collection($posts)->resolve()</span>;
+<span class="cm">// resolve() → чистый массив; Laravel сериализует его в JSON</span>`},
+  dyn:'json',
+  html:`<p><code>resolve()</code> вызывается на <b>ресурсе</b> (builder закончил работу ещё на <code>get()</code>) и разворачивает его в обычный PHP-массив. Метод <code>index()</code> возвращает <code>array</code>, и Laravel автоматически сериализует его в JSON-ответ со статусом 200.</p>
+  <p>Круг замкнулся: query string → валидация → builder → фильтр → SQL → ресурс → JSON.</p>` },
+];
+
+/* =====================================================================
+   РЕНДЕР SVG
+   ===================================================================== */
+const VB = {w:1040, h:1120};
+const svg = $('#diagram');
+svg.setAttribute('viewBox', `0 0 ${VB.w} ${VB.h}`);
+const nodeEls = {}, connEls = [];
+
+function el(name, attrs, parent){
+  const e = document.createElementNS(SVGNS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(t, attrs, parent){
+  const e = el('text', attrs, parent);
+  e.textContent = t;
+  return e;
+}
+
+function renderSvg(){
+  svg.innerHTML = '';
+  const defs = el('defs', {}, svg);
+  el('pattern', {id:'grid', width:26, height:26, patternUnits:'userSpaceOnUse'}, defs)
+    .appendChild(el('circle', {cx:1.2, cy:1.2, r:1.2, fill:'rgba(100,116,139,.14)'}));
+  for (const t in TYPE_COLOR){
+    const m = el('marker', {id:'arr-'+t, markerWidth:9, markerHeight:7, refX:8, refY:3.5, orient:'auto'}, defs);
+    el('polygon', {points:'0 0, 9 3.5, 0 7', fill:TYPE_COLOR[t]}, m);
+  }
+  el('rect', {x:0, y:0, width:VB.w, height:VB.h, fill:'url(#grid)'}, svg);
+
+  // зона «механика фильтра»
+  el('rect', {x:436, y:318, width:596, height:340, rx:14, fill:'rgba(148,163,184,.08)',
+              stroke:'#cbd5e1', 'stroke-dasharray':'5 5'}, svg);
+  txt('Механика фильтра — классы и трейт', {x:452, y:342, class:'zone-label'}, svg);
+  txt('Поток запроса', {x:42, y:18, class:'zone-label'}, svg);
+
+  const gConn = el('g', {}, svg);
+  const gNode = el('g', {}, svg);
+
+  // ---- связи ----
+  connEls.length = 0;
+  CONNS.forEach(c => {
+    const g = el('g', {class:'conn'}, gConn);
+    const nf = NODES.find(n => n.id === c.from), nt = NODES.find(n => n.id === c.to);
+    let d = c.path;
+    if (!d){ // вертикаль по центрам
+      const x1 = nf.x + nf.w/2, y1 = nf.y + nf.h, x2 = nt.x + nt.w/2, y2 = nt.y;
+      const dy = Math.min(46, (y2-y1)/2);
+      d = `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`;
+    }
+    const dash = c.type==='conv' ? '7 4' : c.type==='struct' ? '4 4' : null;
+    const p = el('path', {d, class:'main', stroke:TYPE_COLOR[c.type], 'stroke-width':2.4,
+                          'marker-end':`url(#arr-${c.type})`, ...(dash?{'stroke-dasharray':dash}:{})}, g);
+    // номер шага (кликабельный — переход к шагу) + подпись
+    const L = p.getTotalLength(), t = c.t ?? .5;
+    const pt = p.getPointAtLength(L*t);
+    const bg = el('g', {class:'badge-g'}, g);
+    el('circle', {cx:pt.x, cy:pt.y, r:10, fill:TYPE_COLOR[c.type], class:'badge-c'}, bg);
+    txt(String(c.step), {x:pt.x, y:pt.y+3.5, 'text-anchor':'middle', class:'badge-t'}, bg);
+    const hit = el('circle', {cx:pt.x, cy:pt.y, r:14, fill:'transparent'}, bg);
+    el('title', {}, hit).textContent = `Перейти к шагу ${c.step}`;
+    bg.addEventListener('click', () => go(c.step));
+
+    let lx = pt.x, ly = pt.y, anchor = 'middle';
+    if (c.lp==='right'){ lx += 17; ly += 4; anchor='start'; }
+    if (c.lp==='left') { lx -= 17; ly += 4; anchor='end'; }
+    if (c.lp==='above'){ ly += (c.ldy ?? -16); }
+    if (c.lp==='below'){ ly += (c.ldy ?? 22); }
+    const lt = el('text', {x:lx, y:ly, 'text-anchor':anchor, fill:'#475569'}, g);
+    lt.innerHTML = c.label; // label уже с esc там, где нужно
+    connEls.push({c, g});
+  });
+
+  // ---- узлы ----
+  NODES.forEach(n => {
+    const g = el('g', {class:'node'}, gNode);
+    const [fill, stroke] = COLORS[n.color];
+    el('rect', {x:n.x, y:n.y, width:n.w, height:n.h, rx:11, fill, stroke, 'stroke-width':1.3, class:'body'}, g);
+    txt(n.title, {x:n.x+14, y:n.y+23, class:'n-title'}, g);
+    const subEls = [];
+    n.sub.forEach((s,i) => subEls.push(txt(s, {x:n.x+14, y:n.y+40+i*15, class:'n-sub'}, g)));
+    let chipEl = null;
+    if (n.chip || n.chipDyn){
+      const label = n.chip || '';
+      const cw = Math.max(70, label.length*6.2+16);
+      const cg = el('g', {}, g);
+      el('rect', {x:n.x+14, y:n.y+n.h-22, width:cw, height:16, rx:8,
+                  fill:'rgba(234,88,12,.1)', stroke:'rgba(234,88,12,.4)'}, cg);
+      chipEl = txt(label, {x:n.x+14+cw/2, y:n.y+n.h-10.5, 'text-anchor':'middle',
+                           class:'n-chip', fill:'#c2410c'}, cg);
+      chipEl._rect = cg.firstChild; chipEl._x = n.x+14;
+      if (n.chip){ chipEl._rect.setAttribute('fill','rgba(5,150,105,.09)');
+                   chipEl._rect.setAttribute('stroke','rgba(5,150,105,.4)');
+                   chipEl.setAttribute('fill','#047857'); }
+    }
+    g.addEventListener('mouseenter', e => showTip(n, e));
+    g.addEventListener('mousemove', e => positionTip(e));
+    g.addEventListener('mouseleave', hideTip);
+    g.addEventListener('click', e => { e.stopPropagation(); pinTip(n, e); });
+    nodeEls[n.id] = {g, subEls, chipEl};
+  });
+}
+
+/* ---------------- подсветка активного шага ---------------- */
+function applyStep(){
+  const st = steps[state.step];
+  const activeN = new Set(st.nodes), activeC = new Set(st.conns || []);
+  NODES.forEach(n => {
+    const e = nodeEls[n.id].g;
+    e.classList.toggle('dimmed', state.step>0 && !activeN.has(n.id));
+    e.classList.toggle('active-node', activeN.has(n.id));
+  });
+  connEls.forEach(({c,g}) => {
+    g.classList.toggle('dimmed', state.step>0 && !activeC.has(c.step));
+    g.classList.toggle('active-conn', activeC.has(c.step));
+  });
+}
+
+/* ---------------- подсказка узла: hover + закрепление кликом ---------------- */
+const tipEl = $('#tooltip');
+let pinnedNode = null; // узел, чья подсказка закреплена кликом
+
+function fillTip(n){
+  const code = typeof n.tip === 'function' ? n.tip() : n.tip;
+  tipEl.innerHTML =
+    `<h3>${esc(n.title)}</h3>` +
+    `<div class="t-file">${esc(n.file)}</div>` +
+    `<div class="t-desc">${esc(n.desc)}</div>` +
+    (code ? `<div class="snippet"><pre>${esc(code)}</pre></div>` : '');
+}
+function showTip(n, ev){
+  if (pinnedNode) return;
+  fillTip(n);
+  tipEl.classList.add('show');
+  placeTip(ev);
+}
+function placeTip(ev){
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  let x = ev.clientX + 16, y = ev.clientY + 14;
+  if (x + w > innerWidth - 10)  x = ev.clientX - w - 16;
+  if (y + h > innerHeight - 10) y = Math.max(10, innerHeight - h - 10);
+  tipEl.style.left = x + 'px';
+  tipEl.style.top  = y + 'px';
+}
+function positionTip(ev){
+  if (pinnedNode || !tipEl.classList.contains('show')) return;
+  placeTip(ev);
+}
+function hideTip(){
+  if (!pinnedNode) tipEl.classList.remove('show');
+}
+function pinTip(n, ev){
+  if (pinnedNode === n){ // повторный клик по тому же узлу — обратно в режим hover
+    pinnedNode = null;
+    tipEl.classList.remove('pinned');
+    return;
+  }
+  pinnedNode = n;
+  fillTip(n);
+  tipEl.classList.add('show', 'pinned');
+  placeTip(ev);
+}
+function unpinTip(){
+  pinnedNode = null;
+  tipEl.classList.remove('show', 'pinned');
+}
+document.addEventListener('click', e => {
+  if (pinnedNode && !e.target.closest('#tooltip')) unpinTip();
+});
+
+/* ---------------- динамические блоки шага ---------------- */
+function dynHtml(kind){
+  const a = activeParams();
+  if (kind==='url'){
+    return `<div class="dyn"><h4>Текущий запрос</h4><div class="kv"><span class="acc">GET</span> ${esc(buildUrl())}</div></div>`;
+  }
+  if (kind==='data'){
+    const rows = a.length
+      ? a.map(p => `    <span class="acc">'${p.key}'</span> => <span class="accg">'${esc(val(p.key))}'</span>,`).join('\n')
+      : '    <span class="mut">// пусто — ни один фильтр не пришёл</span>';
+    return `<div class="dyn"><h4>$data = $request->validated()</h4><div class="kv">[\n${rows}\n]\n<span class="mut">// query-параметры приходят СТРОКАМИ: '1', а не 1</span></div></div>`;
+  }
+  if (kind==='map'){
+    const rows = PARAMS.map(p => {
+      const on = state.params[p.key].on && val(p.key)!=='';
+      return `<tr class="${on?'hit':'miss'}"><td>'${p.key}'</td><td class="arr">→</td>` +
+             `<td>${on ? `Str::camel → <b>${p.m}()</b> ✓` : '<i>нет в $data — пропущен (isset)</i>'}</td></tr>`;
+    }).join('');
+    return `<div class="dyn"><h4>Прогон foreach для текущего сценария</h4>
+      <div class="kv" style="padding:4px 8px"><table class="map">${rows}</table></div></div>`;
+  }
+  if (kind==='methods'){
+    const show = a.length ? a.slice(0,3) : [];
+    let code = show.map(p => esc(METHOD_SRC[p.key])).join('\n\n');
+    if (!a.length) code = `<span class="mut">// в этом сценарии не вызовется ни один метод —\n// builder останется без where, вернутся все посты</span>`;
+    const more = a.length>3 ? `\n\n<span class="mut">// … и ещё ${a.length-3}: ${a.slice(3).map(p=>p.m+'()').join(', ')}</span>` : '';
+    const whereList = buildWhere();
+    const wsql = whereList.length
+      ? 'where ' + whereList.map(esc).join('\n  and ')
+      : '<span class="mut">— условий where нет —</span>';
+    return `<div class="dyn"><h4>Вызванные методы PostFilter (${a.length})</h4>
+      <div class="snippet">${FILE('app/Filters/PostFilter.php')}<pre>${code}${more}</pre></div>
+      <h4>Что накопилось в Builder</h4><div class="kv"><span class="acco">${wsql}</span></div></div>`;
+  }
+  if (kind==='sql'){
+    const eager = `\n\n<span class="mut">-- + второй запрос от with('category'):</span>\nselect * from "categories" where "categories"."id" in (3, 5, 8)`;
+    return `<div class="dyn"><h4>Итоговый SQL (PostgreSQL)</h4><div class="kv">${esc(buildSql())}${eager}</div>
+      <div class="side-note" style="margin-top:6px"><code>ilike</code> — регистронезависимый LIKE, диалект PostgreSQL.</div></div>`;
+  }
+  if (kind==='json'){
+    const t = state.params.title.on ? val('title') : null;
+    const cat = {id: state.params.category_id.on ? +val('category_id') : 3,
+                 title: state.params.category_title.on ? 'Новости ('+val('category_title')+'…)' : 'Новости'};
+    const stt = state.params.status.on ? +val('status') : 1;
+    const mk = (id, ttl, d) => ({id, author_id:7, category_id:cat.id,
+      title:ttl, content:'…', img_path:null, status:stt, published_at:d, category:cat});
+    const posts = [
+      mk(12, t ? `${t[0].toUpperCase()+t.slice(1)} 13: что нового` : 'Первый пост', '2026-03-14 10:00:00'),
+      mk(27, t ? `Заметки про ${t}` : 'Ещё один пост', '2026-05-02 18:30:00'),
+    ];
+    return `<div class="dyn"><h4>Пример ответа (2 поста подошли под фильтр)</h4>
+      <div class="kv">${esc(JSON.stringify(posts, null, 2))}</div></div>`;
+  }
+  return '';
+}
+
+/* ---------------- панель шагов ---------------- */
+function renderStep(){
+  const st = steps[state.step];
+  $('#sCount').innerHTML = state.step===0 ? '<b>Обзор</b> · 13 шагов впереди'
+    : `Шаг <b>${state.step}</b> из ${steps.length-1}`;
+  $('#sPrev').disabled = state.step===0;
+  $('#sNext').disabled = state.step===steps.length-1;
+
+  let h = `<h2>${state.step>0?`<span class="stepno">${state.step}.</span>`:''}${st.title}</h2>`;
+  h += st.html || '';
+  if (st.code) h += `<div class="snippet">${FILE(esc(st.code.f))}<pre>${st.code.s}</pre></div>`;
+  if (st.dyn) h += dynHtml(st.dyn);
+  $('#sContent').innerHTML = h;
+
+  const dots = steps.map((_,i) =>
+    `<button class="dot ${i===state.step?'on':i<state.step?'done':''}" data-i="${i}" title="${i===0?'Обзор':'Шаг '+i}"></button>`).join('');
+  $('#sDots').innerHTML = dots;
+  $('#sDots').querySelectorAll('.dot').forEach(d => d.onclick = () => go(+d.dataset.i));
+  applyStep();
+}
+function go(i){
+  state.step = Math.max(0, Math.min(steps.length-1, i));
+  renderStep();
+}
+
+/* ---------------- сайдбар ---------------- */
+function renderPresets(){
+  $('#presets').innerHTML = PRESETS.map((p,i) =>
+    `<button class="preset ${state.activePreset===i?'active':''}" data-i="${i}">${p.name}</button>`).join('');
+  $('#presets').querySelectorAll('.preset').forEach(b => b.onclick = () => {
+    applyPreset(+b.dataset.i); renderPresets(); renderParams(); updateAll();
+  });
+}
+function renderParams(){
+  const box = $('#params'); box.innerHTML = '';
+  PARAMS.forEach(p => {
+    const s = state.params[p.key];
+    const row = document.createElement('div');
+    row.className = 'param' + (s.on?' on':'');
+    const input = p.type==='select'
+      ? `<select ${s.on?'':'disabled'}>
+           <option value="1" ${s.value==='1'?'selected':''}>1 — Опубликовано</option>
+           <option value="2" ${s.value==='2'?'selected':''}>2 — На модерации</option>
+         </select>`
+      : `<input type="text" value="${esc(s.value)}" ${s.on?'':'disabled'}>`;
+    row.innerHTML = `<input type="checkbox" ${s.on?'checked':''}><span class="k">${p.key}</span>${input}`;
+    const [cb, , field] = row.children;
+    cb.onchange = () => { s.on = cb.checked; state.activePreset = -1; renderParams(); renderPresets(); updateAll(); };
+    row.querySelector('.k').onclick = () => cb.click();
+    field.oninput = field.onchange = () => { s.value = field.value; updateAll(); };
+    box.appendChild(row);
+  });
+}
+
+/* ---------------- живые надписи на схеме ---------------- */
+function refreshSvgTexts(){
+  const url = buildUrl();
+  const short = url.length>42 ? url.slice(0,41)+'…' : url;
+  nodeEls.client.subEls[0].textContent = 'GET ' + short;
+  const n = activeParams().length;
+  const chip = nodeEls.postfilter.chipEl;
+  const label = n ? `сработает методов: ${n}` : 'нет активных фильтров';
+  chip.textContent = label;
+  const cw = Math.max(70, label.length*6.2+16);
+  chip._rect.setAttribute('width', cw);
+  chip.setAttribute('x', chip._x + cw/2);
+}
+
+/* ---------------- легенда ---------------- */
+function line(color, dash){
+  return `<svg width="30" height="8"><line x1="1" y1="4" x2="29" y2="4" stroke="${color}" stroke-width="2.4" ${dash?`stroke-dasharray="${dash}"`:''}/></svg>`;
+}
+$('#legend').innerHTML =
+  `<div class="li">${line(TYPE_COLOR.flow)} поток запроса</div>` +
+  `<div class="li">${line(TYPE_COLOR.ret)} возврат результата</div>` +
+  `<div class="li">${line(TYPE_COLOR.conv,'7 4')} соглашение имён («магия»)</div>` +
+  `<div class="li">${line(TYPE_COLOR.struct,'4 4')} структура: use / extends</div>`;
+
+/* ---------------- сворачивание левой панели ---------------- */
+$('#btnSide').onclick = () => {
+  const collapsed = document.body.classList.toggle('side-collapsed');
+  const b = $('#btnSide');
+  b.textContent = collapsed ? '▶' : '◀';
+  b.title = collapsed ? 'Развернуть панель сценария' : 'Свернуть панель сценария';
+};
+
+/* ---------------- перетаскивание схемы + клик по пустому месту ---------------- */
+const scroller = $('#canvasScroll');
+let pan = null;
+scroller.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.node') || e.target.closest('.badge-g')) return;
+  pan = {x:e.clientX, y:e.clientY, sl:scroller.scrollLeft, st:scroller.scrollTop,
+         moved:false, emptyClick: !e.target.closest('.conn')};
+  scroller.classList.add('panning');
+  scroller.setPointerCapture(e.pointerId);
+});
+scroller.addEventListener('pointermove', e => {
+  if (!pan) return;
+  if (Math.abs(e.clientX - pan.x) > 4 || Math.abs(e.clientY - pan.y) > 4) pan.moved = true;
+  scroller.scrollLeft = pan.sl - (e.clientX - pan.x);
+  scroller.scrollTop  = pan.st - (e.clientY - pan.y);
+});
+const endPan = () => { pan = null; scroller.classList.remove('panning'); };
+scroller.addEventListener('pointerup', () => {
+  // клик без движения — сброс; но если закреплена подсказка, клик лишь закрывает её
+  if (pan && !pan.moved && pan.emptyClick && !pinnedNode) resetScenario();
+  endPan();
+});
+scroller.addEventListener('pointercancel', endPan);
+
+/* ---------------- зум, навигация, автоплей ---------------- */
+function applyZoom(){
+  svg.style.width = Math.round(860 * state.zoom) + 'px';
+  svg.style.maxWidth = 'none';
+}
+$('#zIn').onclick  = () => { state.zoom = Math.min(2.4, state.zoom*1.2); applyZoom(); };
+$('#zOut').onclick = () => { state.zoom = Math.max(.5, state.zoom/1.2); applyZoom(); };
+$('#zFit').onclick = () => { state.zoom = 1; applyZoom(); };
+$('#sPrev').onclick = () => go(state.step-1);
+$('#sNext').onclick = () => go(state.step+1);
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select')) return;
+  if (e.key==='ArrowRight') go(state.step+1);
+  if (e.key==='ArrowLeft')  go(state.step-1);
+  if (e.key==='Escape'){ unpinTip(); stopPlay(); }
+});
+let playTimer = null;
+function stopPlay(){ clearInterval(playTimer); playTimer = null; $('#btnPlay').textContent = '▶'; }
+$('#btnPlay').onclick = () => {
+  if (playTimer) return stopPlay();
+  $('#btnPlay').textContent = '⏸';
+  if (state.step >= steps.length-1) go(0);
+  playTimer = setInterval(() => {
+    if (state.step >= steps.length-1) return stopPlay();
+    go(state.step+1);
+  }, 3000);
+};
+function resetScenario(){
+  applyPreset(DEFAULT_PRESET); state.step = 0;
+  renderPresets(); renderParams(); updateAll();
+}
+$('#btnReset').onclick = resetScenario;
+
+/* ---------------- общий апдейт ---------------- */
+function updateAll(){
+  refreshSvgTexts();
+  renderStep();      // перерисует и динамические блоки шага
+}
+
+renderSvg();
+renderPresets();
+renderParams();
+applyZoom();
+updateAll();
+</script>
+</body>
+</html>

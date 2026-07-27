@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\HasFilter;
 use App\Models\Traits\HasLog;
 use Database\Factories\PostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Post extends Model {
     /** @use HasFactory<PostFactory> */
-    use HasFactory, HasLog;
+    use HasFactory, HasFilter, HasLog;
 
     public const STATUS_PUBLISHED = 1;
 

@@ -28,9 +28,9 @@ Route::group(['middleware' => 'jwt.auth', 'prefix' => 'auth'], function () {
     Route::post('me', [AuthController::class, 'me']);
 });
 
-Route::group(['middleware' => ['jwt.auth', 'admin']], function () {
-    Route::apiResource('posts', PostController::class);
-});
+// Route::group(['middleware' => ['jwt.auth', 'admin']], function () {
+Route::apiResource('posts', PostController::class);
+// });
 
 Route::apiResource('categories', CategoryController::class);
 Route::apiResource('tags', TagController::class);

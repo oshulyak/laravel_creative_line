@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Post\IndexRequest;
 use App\Http\Requests\Api\Post\StoreRequest;
 use App\Http\Requests\Api\Post\UpdateRequest;
 use App\Http\Resources\Post\PostResource;
@@ -13,8 +14,13 @@ class PostController extends Controller {
     /**
      * Список всех постов.
      */
-    public function index(): array {
-        return PostResource::collection(Post::all())->resolve();
+    public function index(IndexRequest $request): array {
+        $posts = Post::query()
+            ->filter($request->validated())
+            ->with('category')
+            ->get();
+
+        return PostResource::collection($posts)->resolve();
     }
 
     /**

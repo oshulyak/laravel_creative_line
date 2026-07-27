@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Как работает фильтр Post — Line</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #141a23;
+    --panel-2: #1b222d;
+    --panel-3: #232b38;
+    --line: #2a3140;
+    --text: #e6e9ef;
+    --muted: #8b96a5;
+    --accent: #60a5fa;
+    --accent-ink: #0d1117;
+    --warn: #f59e0b;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+    --client-fill: #17273f;
+    --client-stroke: #3b82f6;
+    --routing-fill: #3a2c10;
+    --routing-stroke: #f59e0b;
+    --scope-fill: #2c1c40;
+    --scope-stroke: #a855f7;
+    --filters-fill: #0f3327;
+    --filters-stroke: #10b981;
+    --execution-fill: #3d1730;
+    --execution-stroke: #ec4899;
+
+    --flow-blue: #3b82f6;
+    --flow-green: #10b981;
+    --flow-gray: #7c8698;
+    --flow-orange: #f97316;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    grid-template-rows: 1fr auto;
+    height: 100vh;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    grid-row: 1 / 3;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 18px 16px 28px;
+  }
+  .sidebar h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: .2px; }
+  .sidebar .sub { font-size: 12px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .sidebar code { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+
+  .group { margin-bottom: 20px; }
+  .group > .label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--muted); margin-bottom: 8px; font-weight: 600;
+  }
+
+  .corrections { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .corrections .label { color: var(--warn); }
+  .corrections ol { margin: 0; padding-left: 18px; }
+  .corrections li { font-size: 12px; line-height: 1.55; margin-bottom: 8px; color: var(--text); }
+  .corrections li:last-child { margin-bottom: 0; }
+  .corrections b { color: var(--warn); }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-size: 12px; padding: 7px 11px; border-radius: 7px; cursor: pointer; transition: .12s;
+  }
+  .preset:hover { border-color: var(--accent); }
+  .preset.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+  .layer-toggle, .edge-toggle {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+    padding: 5px 0; cursor: pointer; color: var(--text);
+  }
+  .layer-toggle input, .edge-toggle input { accent-color: var(--accent); cursor: pointer; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .dash-swatch { width: 18px; height: 0; border-top-width: 2px; flex-shrink: 0; }
+
+  .empty-hint { font-size: 11.5px; color: var(--muted); line-height: 1.5; font-style: italic; }
+  .comment-item {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 8px; position: relative;
+  }
+  .comment-target { font-size: 11.5px; font-weight: 600; color: var(--accent); margin-bottom: 3px; padding-right: 18px; }
+  .comment-text { font-size: 12px; color: var(--text); line-height: 1.45; white-space: pre-wrap; }
+  .comment-del {
+    position: absolute; top: 6px; right: 6px; background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+  }
+  .comment-del:hover { color: #f87171; background: var(--panel-3); }
+
+  .sidebar-footer { font-size: 10.5px; color: var(--muted); margin-top: 24px; border-top: 1px solid var(--line); padding-top: 10px; }
+
+  /* ---------- Canvas ---------- */
+  .canvas-wrap { position: relative; overflow: hidden; background: var(--bg); }
+  .canvas-toolbar {
+    position: absolute; top: 12px; right: 16px; z-index: 5;
+    display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 4px;
+  }
+  .canvas-toolbar button {
+    width: 28px; height: 28px; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 6px; cursor: pointer; font-size: 14px; font-family: var(--mono);
+  }
+  .canvas-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .canvas-scroll { width: 100%; height: 100%; overflow: auto; padding: 20px; }
+  #diagram { display: block; background: var(--bg); }
+
+  .node { cursor: pointer; }
+  .node rect { transition: filter .12s, stroke-width .12s; }
+  .node:hover rect { filter: brightness(1.25); }
+  .node-label { font: 600 14px var(--sans); fill: var(--text); }
+  .node-subtitle { font: 10.5px var(--mono); fill: var(--muted); }
+
+  .edge-dataFlow { stroke: var(--flow-blue); }
+  .edge-toolCall { stroke: var(--flow-green); stroke-dasharray: 6,3; }
+  .edge-skillInvoke { stroke: var(--flow-orange); stroke-dasharray: 8,4; }
+  .edge-dependency { stroke: var(--flow-gray); stroke-dasharray: 1,4; }
+  .edge-path { fill: none; stroke-width: 1.8; }
+  .edge-label-bg { fill: var(--panel); opacity: .95; }
+  .edge-label-text { font: 10px var(--mono); fill: var(--muted); }
+
+  .legend {
+    position: absolute; bottom: 16px; left: 16px; z-index: 5;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 11px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .legend .item { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .legend .line { width: 22px; height: 0; border-top-width: 2.5px; border-top-style: solid; }
+
+  /* ---------- Prompt bar ---------- */
+  .prompt-bar {
+    grid-column: 2; border-top: 1px solid var(--line); background: var(--panel);
+    padding: 12px 16px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .prompt-text {
+    flex: 1; font-family: var(--mono); font-size: 11.5px; color: var(--text);
+    white-space: pre-wrap; line-height: 1.5; max-height: 110px; overflow-y: auto;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  }
+  .copy-btn {
+    flex-shrink: 0; background: var(--accent); color: var(--accent-ink); border: none;
+    border-radius: 8px; padding: 10px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer; align-self: center;
+  }
+  .copy-btn:hover { filter: brightness(1.08); }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    width: 600px; max-width: 92vw; max-height: 84vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px;
+  }
+  .modal h3 { margin: 0 0 2px; font-size: 16px; }
+  .modal .modal-subtitle { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+  .modal-detail {
+    white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    background: var(--panel-2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 8px;
+    margin: 0 0 14px; overflow-x: auto; color: var(--text);
+  }
+  .modal label.field-label { display:block; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 6px; }
+  .modal textarea {
+    width: 100%; min-height: 70px; resize: vertical; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: var(--sans); font-size: 13px;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .modal-actions button {
+    border-radius: 7px; padding: 8px 14px; font-size: 12.5px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text);
+  }
+  .modal-actions button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .modal-actions button.danger { color: #f87171; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <h1>Как работает фильтр Post</h1>
+    <p class="sub">
+      Путь запроса <code>GET /api/posts?...</code> от HTTP до JSON-ответа: роутинг, валидация,
+      механизм Eloquent Local Scope (<code>filter() → scopeFilter()</code>) и классы
+      <code>PostFilter</code> / <code>AbstractFilter</code>. Кликай по узлам схемы — там код и место для заметки.
+    </p>
+
+    <div class="group corrections">
+      <div class="label">Что скорректировано в твоём описании</div>
+      <ol>
+        <li><b>Запрос — GET, не JSON.</b> Фильтры приходят через query string (<code>?author_id=1&title=...</code>), а не в JSON-теле. JSON — это формат ответа, не запроса.</li>
+        <li><b>Добавлены роутинг и валидация.</b> Перед телом <code>index()</code> запрос проходит <code>routes/api.php</code>, а <code>IndexRequest</code> валидирует query-параметры ещё до выполнения кода контроллера.</li>
+        <li><b>Уточнён механизм п. 4–6.</b> Builder не «ищет метод через trait» напрямую: сначала он не находит <code>filter()</code> среди своих методов, затем по механизму Local Scopes обращается к модели <code>Post</code> (на которую у него есть ссылка) и находит там <code>scopeFilter()</code> — этот метод в <code>Post</code> появляется именно благодаря трейту <code>HasFilter</code>.</li>
+        <li><b>Добавлен <code>-&gt;with('category')</code>.</b> В реальном коде контроллера категория подгружается заранее (eager loading) между <code>filter()</code> и <code>get()</code> — иначе будет N+1 запрос.</li>
+        <li><b>Добавлен шаг <code>PostResource::collection()</code>.</b> <code>resolve()</code> вызывается не «сам по себе», а на обёртке коллекции ресурсов, которая создаётся отдельным шагом после <code>get()</code>.</li>
+      </ol>
+    </div>
+
+    <div class="group">
+      <div class="label">Пресеты вида</div>
+      <div class="presets">
+        <button class="preset active" data-preset="full">Весь процесс</button>
+        <button class="preset" data-preset="routing">1. Роутинг и валидация</button>
+        <button class="preset" data-preset="scope">2. Поиск scopeFilter</button>
+        <button class="preset" data-preset="filters">3. Классы фильтров</button>
+        <button class="preset" data-preset="execution">4. Выполнение и ответ</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">Слои</div>
+      <label class="layer-toggle"><input type="checkbox" data-layer="request-in"><span class="swatch" style="background:var(--client-stroke)"></span>Входящий запрос</label>
+      <label class="layer-toggle"><input type="checkbox" data-layer="routing"><span class="swatch" style="background:var(--routing-stroke)"></span>Роутинг и валидация</label>
+      <label class="layer-toggle"><input type="checkbox" data-layer="scope"><span class="swatch" style="background:var(--scope-stroke)"></span>Поиск scopeFilter (Eloquent)</label>
+      <label class="layer-toggle"><input type="checkbox" data-layer="filters"><span class="swatch" style="background:var(--filters-stroke)"></span>Классы фильтров</label>
+      <label class="layer-toggle"><input type="checkbox" data-layer="execution"><span class="swatch" style="background:var(--execution-stroke)"></span>Выполнение и ресурсы</label>
+      <label class="layer-toggle"><input type="checkbox" data-layer="response-out"><span class="swatch" style="background:var(--client-stroke)"></span>JSON-ответ</label>
+    </div>
+
+    <div class="group">
+      <div class="label">Типы связей</div>
+      <label class="edge-toggle"><input type="checkbox" data-edge="dataFlow"><span class="dash-swatch" style="border-color:var(--flow-blue)"></span>Поток данных</label>
+      <label class="edge-toggle"><input type="checkbox" data-edge="toolCall"><span class="dash-swatch" style="border-color:var(--flow-green);border-top-style:dashed"></span>Вызов метода</label>
+      <label class="edge-toggle"><input type="checkbox" data-edge="skillInvoke"><span class="dash-swatch" style="border-color:var(--flow-orange);border-top-style:dashed"></span>Поиск по соглашению имён</label>
+      <label class="edge-toggle"><input type="checkbox" data-edge="dependency"><span class="dash-swatch" style="border-color:var(--flow-gray);border-top-style:dotted"></span>Наследование / trait</label>
+    </div>
+
+    <div class="group">
+      <div class="label">Комментарии (<span id="commentCount">0</span>)</div>
+      <div id="commentsList"><div class="empty-hint">Кликни по узлу схемы, чтобы посмотреть код шага и оставить свой вопрос или заметку.</div></div>
+    </div>
+
+    <div class="sidebar-footer">Показан только <code>index()</code> (список с фильтром). <code>store</code>/<code>show</code>/<code>update</code>/<code>destroy</code> в схему не входят.</div>
+  </aside>
+
+  <main class="canvas-wrap">
+    <div class="canvas-toolbar">
+      <button id="zoomOut" title="Уменьшить">−</button>
+      <button id="zoomReset" title="Сбросить масштаб">1:1</button>
+      <button id="zoomIn" title="Увеличить">+</button>
+    </div>
+    <div class="canvas-scroll">
+      <svg id="diagram" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/></marker>
+          <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#10b981"/></marker>
+          <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f97316"/></marker>
+          <marker id="arrow-gray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7c8698"/></marker>
+        </defs>
+        <g id="edgesLayer"></g>
+        <g id="nodesLayer"></g>
+      </svg>
+    </div>
+    <div class="legend">
+      <div class="item"><span class="line" style="border-top-color:var(--flow-blue)"></span>Поток данных / вызов в цепочке</div>
+      <div class="item"><span class="line" style="border-top-color:var(--flow-green);border-top-style:dashed"></span>Вызов метода (внутренний)</div>
+      <div class="item"><span class="line" style="border-top-color:var(--flow-orange);border-top-style:dashed"></span>Поиск по соглашению имён (магия Laravel)</div>
+      <div class="item"><span class="line" style="border-top-color:var(--flow-gray);border-top-style:dotted"></span>Наследование / подключение trait</div>
+    </div>
+  </main>
+
+  <div class="prompt-bar">
+    <div class="prompt-text" id="promptText"></div>
+    <button class="copy-btn" id="copyBtn">Скопировать</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <div class="modal-subtitle" id="modalSubtitle"></div>
+    <pre class="modal-detail" id="modalDetail"></pre>
+    <label class="field-label" for="modalComment">Твой вопрос или заметка об этом шаге</label>
+    <textarea id="modalComment" placeholder="Например: почему $this внутри scopeFilter — это модель, а не Builder?"></textarea>
+    <div class="modal-actions">
+      <button id="modalDelete" class="danger" style="display:none;">Удалить заметку</button>
+      <button id="modalCancel">Отмена</button>
+      <button id="modalSave" class="primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CANVAS_W = 920, CANVAS_H = 1950;
+const MAIN_X = 60, MAIN_W = 340;
+const SIDE_X = 600, SIDE_W = 280;
+
+const NODES = [
+  { id:'n1', layer:'request-in', x:MAIN_X, y:30, w:MAIN_W, h:70,
+    label:'HTTP-запрос', subtitle:'GET /api/posts?author_id=1&title=...',
+    detail: String.raw`Клиент (например, Postman) отправляет GET-запрос с параметрами фильтра в query string,
+а НЕ в JSON-теле:
+
+GET /api/posts?author_id=1&title=laravel&published_at_from=2026-01-01 00:00:00
+
+index() — это GET-запрос, у GET нет тела; все параметры передаются через строку запроса.
+JSON в этом процессе — формат ОТВЕТА, а не запроса.` },
+
+  { id:'n2', layer:'routing', x:MAIN_X, y:150, w:MAIN_W, h:70,
+    label:'Маршрутизация', subtitle:'routes/api.php',
+    detail: String.raw`Route::apiResource('posts', PostController::class);
+
+Эта одна строка регистрирует 5 REST-маршрутов сразу, включая:
+GET /api/posts → PostController@index
+
+Laravel находит подходящий маршрут по URL и HTTP-методу и определяет,
+какой контроллер и метод будут обрабатывать запрос.` },
+
+  { id:'n3', layer:'routing', x:MAIN_X, y:270, w:MAIN_W, h:70,
+    label:'IndexRequest', subtitle:'app/Http/Requests/Api/Post/IndexRequest.php',
+    detail: String.raw`Прежде чем выполнится ТЕЛО index(), Laravel через Service Container разрешает
+зависимость IndexRequest $request и автоматически валидирует query-параметры
+по правилам rules():
+
+'id' => ['nullable', 'integer', 'min:1'],
+'author_id' => ['nullable', 'integer', 'min:1'],
+'category_id' => ['nullable', 'integer', 'min:1', 'exists:categories,id'],
+'title' => ['nullable', 'string', 'max:255'],
+'status' => ['nullable', 'integer', Rule::in(array_keys(Post::getStatuses()))],
+'published_at_from' => ['nullable', 'date_format:Y-m-d H:i:s'],
+... и так далее по всем атрибутам Post
+
+Если валидация не проходит — клиент сразу получает 422, тело контроллера
+вообще не выполняется.` },
+
+  { id:'n4', layer:'routing', x:MAIN_X, y:390, w:MAIN_W, h:70,
+    label:'PostController::index()', subtitle:'app/Http/Controllers/Api/PostController.php',
+    detail: String.raw`public function index(IndexRequest $request): array {
+    $posts = Post::query()
+        ->filter($request->validated())
+        ->with('category')
+        ->get();
+
+    return PostResource::collection($posts)->resolve();
+}
+
+$request->validated() возвращает массив только с проверенными ключами —
+лишние или невалидные query-параметры в него не попадают.` },
+
+  { id:'n5', layer:'scope', x:MAIN_X, y:510, w:MAIN_W, h:70,
+    label:'Post::query()', subtitle:'статический метод Eloquent Model',
+    detail: String.raw`Post::query() — статический метод, создающий новый
+Illuminate\Database\Eloquent\Builder.
+
+Builder не работает сам по себе — внутри он хранит ссылку на модель,
+которая его создала ($builder->setModel($post)). Именно эта ссылка
+позволит чуть позже найти scope-методы модели Post.` },
+
+  { id:'n6', layer:'scope', x:MAIN_X, y:630, w:MAIN_W, h:70,
+    label:'->filter($data)', subtitle:'вызов на Eloquent Builder',
+    detail: String.raw`Контроллер вызывает ->filter($request->validated()) прямо в цепочке
+после query(). Но метода filter() среди обычных методов
+Illuminate\Database\Eloquent\Builder не существует — его там просто нет.` },
+
+  { id:'n7', layer:'scope', x:MAIN_X, y:750, w:MAIN_W, h:70,
+    label:'Поиск метода (магия Eloquent)', subtitle:'механизм __call() в Eloquent Builder',
+    detail: String.raw`Когда вызывается несуществующий метод, у Eloquent Builder срабатывает
+магический __call(). Он проверяет: hasNamedScope('filter') — есть ли
+у модели, на которую ссылается builder, метод с именем scopeFilter.
+
+Это и есть механизм Local Scopes в Laravel: метод модели scopeXxx()
+можно вызывать в цепочке builder'а как ->xxx() — без префикса scope
+и без первого параметра. Laravel сам подставит текущий $builder первым
+аргументом.` },
+
+  { id:'n8', layer:'filters', x:MAIN_X, y:870, w:MAIN_W, h:70,
+    label:'scopeFilter() выполняется', subtitle:'app/Models/Traits/HasFilter.php',
+    detail: String.raw`public function scopeFilter(Builder $builder, array $data): Builder {
+    $className = 'App\\Filters\\'.class_basename($this).'Filter';
+
+    return (new $className)->apply($builder, $data);
+}
+
+Внутри scope-метода $this — это экземпляр МОДЕЛИ (Post), а не Builder.
+Поэтому class_basename($this) вернёт 'Post', и $className станет
+'App\Filters\PostFilter'.` },
+
+  { id:'n9', layer:'filters', x:MAIN_X, y:990, w:MAIN_W, h:70,
+    label:'new PostFilter()', subtitle:'app/Filters/PostFilter.php',
+    detail: String.raw`Имя класса фильтра вычисляется по соглашению:
+<ИмяМодели> + 'Filter'. Для Post это PostFilter.
+
+Создаётся новый объект PostFilter, и на нём вызывается
+apply($builder, $data).` },
+
+  { id:'n10', layer:'filters', x:MAIN_X, y:1110, w:MAIN_W, h:70,
+    label:'apply($builder, $data)', subtitle:'унаследован из AbstractFilter',
+    detail: String.raw`PostFilter НЕ переопределяет apply() — метод выполняется из
+родительского класса AbstractFilter.
+
+Это пример паттерна Template Method: общий алгоритм — в базовом
+классе, а конкретные шаги (какие условия применить) — в наследнике.` },
+
+  { id:'n11', layer:'filters', x:MAIN_X, y:1230, w:MAIN_W, h:70,
+    label:'Методы условий PostFilter', subtitle:'14 protected-методов',
+    detail: String.raw`apply() перебирает $this->keys и для каждого пришедшего ключа вызывает
+одноимённый (в camelCase) protected-метод, уже определённый в самом
+PostFilter:
+
+protected function authorId(Builder $builder, int|string $value): void {
+    $builder->where('author_id', (int) $value);
+}
+
+protected function categoryTitle(Builder $builder, string $value): void {
+    $builder->whereRelation('category', 'title', 'ilike', "%{$value}%");
+}
+
+protected function publishedAtFrom(Builder $builder, string $value): void {
+    $builder->where('published_at', '>=', $value);
+}
+
+...и ещё 11 методов: id, categoryId, title, content, imgPath, status,
+publishedAtTo, createdAtFrom/To, updatedAtFrom/To.
+
+Каждый метод мутирует ОДИН и тот же объект $builder — новый Builder
+не создаётся на каждом шаге.` },
+
+  { id:'n12', layer:'execution', x:MAIN_X, y:1350, w:MAIN_W, h:70,
+    label:"->with('category')", subtitle:'eager loading',
+    detail: String.raw`apply() и scopeFilter() вернули тот же $builder, теперь уже
+с условиями where/whereRelation. Цепочка в контроллере продолжается:
+
+->with('category')
+
+Категория подгружается заранее ОДНИМ дополнительным запросом.
+Без этого шага при выводе списка постов связь category подгружалась бы
+лениво отдельным запросом на КАЖДЫЙ пост — классическая проблема N+1.` },
+
+  { id:'n13', layer:'execution', x:MAIN_X, y:1470, w:MAIN_W, h:70,
+    label:'->get()', subtitle:'выполнение SQL',
+    detail: String.raw`Только на этом шаге Eloquent реально обращается к базе данных.
+Собранный Builder превращается в SQL:
+
+SELECT * FROM posts WHERE author_id = 1 AND title ILIKE '%laravel%' ...
+
+Результат — коллекция моделей Post
+(Illuminate\Database\Eloquent\Collection).` },
+
+  { id:'n14', layer:'execution', x:MAIN_X, y:1590, w:MAIN_W, h:70,
+    label:'PostResource::collection()', subtitle:'app/Http/Resources/Post/PostResource.php',
+    detail: String.raw`Оборачивает коллекцию Eloquent-моделей в коллекцию API-ресурсов.
+Каждый Post получит собственный PostResource, определяющий,
+какие поля и в каком виде попадут в JSON — включая вложенный
+CategoryResource для уже загруженной связи category.` },
+
+  { id:'n15', layer:'execution', x:MAIN_X, y:1710, w:MAIN_W, h:70,
+    label:'->resolve()', subtitle:'toArray() для каждого элемента',
+    detail: String.raw`resolve() превращает коллекцию ресурсов в обычный PHP-массив,
+вызывая toArray() каждого PostResource, а внутри —
+вложенный CategoryResource::make(...)->resolve() для поля category.` },
+
+  { id:'n16', layer:'response-out', x:MAIN_X, y:1830, w:MAIN_W, h:70,
+    label:'JSON-ответ', subtitle:'HTTP 200',
+    detail: String.raw`PostController::index() возвращает обычный PHP array.
+
+Laravel API-роутинг автоматически сериализует любой array,
+возвращённый из controller action, в JSON и отправляет клиенту
+как HTTP-ответ.` },
+
+  { id:'s1', layer:'scope', x:SIDE_X, y:510, w:SIDE_W, h:70,
+    label:'Post (Model)', subtitle:'app/Models/Post.php',
+    detail: String.raw`class Post extends Model {
+    use HasFactory, HasFilter, HasLog;
+    // ...
+}
+
+Post — «домашняя» модель для Builder'а, полученного через Post::query().
+Именно к этой модели Eloquent обратится в поиске scope-методов.` },
+
+  { id:'s2', layer:'scope', x:SIDE_X, y:750, w:SIDE_W, h:70,
+    label:'HasFilter (Trait)', subtitle:'app/Models/Traits/HasFilter.php',
+    detail: String.raw`trait HasFilter {
+    public function scopeFilter(Builder $builder, array $data): Builder {
+        $className = 'App\\Filters\\'.class_basename($this).'Filter';
+
+        return (new $className)->apply($builder, $data);
+    }
+}
+
+Подключение через "use HasFilter" в Post физически добавляет метод
+scopeFilter прямо в класс Post — как если бы он был написан там же.` },
+
+  { id:'s3', layer:'filters', x:SIDE_X, y:990, w:SIDE_W, h:70,
+    label:'AbstractFilter', subtitle:'app/Filters/AbstractFilter.php',
+    detail: String.raw`abstract class AbstractFilter {
+    protected array $keys = [];
+
+    public function apply(Builder $builder, array $data): Builder {
+        foreach ($this->keys as $key) {
+            if (isset($data[$key])) {
+                $methodName = Str::camel($key);
+                $this->{$methodName}($builder, $data[$key]);
+            }
+        }
+        return $builder;
+    }
+}
+
+PostFilter extends AbstractFilter — получает apply() и общий алгоритм
+"бесплатно", определяя лишь свой список ключей $keys и сами
+методы-условия (authorId, title, ...).` },
+];
+
+const EDGES = [
+  { from:'n1', to:'n2', type:'dataFlow', label:'query string' },
+  { from:'n2', to:'n3', type:'dataFlow', label:'→ index()' },
+  { from:'n3', to:'n4', type:'dataFlow', label:'validated()' },
+  { from:'n4', to:'n5', type:'dataFlow', label:'Post::query()' },
+  { from:'n5', to:'n6', type:'dataFlow', label:'->filter(data)' },
+  { from:'n6', to:'n7', type:'toolCall', label:'метод не найден' },
+  { from:'s1', to:'n5', type:'dependency', label:'setModel()' },
+  { from:'s1', to:'s2', type:'dependency', label:'use HasFilter' },
+  { from:'n7', to:'s2', type:'skillInvoke', label:'ищет scopeFilter' },
+  { from:'s2', to:'n8', type:'toolCall', label:'$post->scopeFilter()' },
+  { from:'n8', to:'n9', type:'toolCall', label:"'...Filter' → new" },
+  { from:'n9', to:'n10', type:'dataFlow', label:'apply(builder,data)' },
+  { from:'n9', to:'s3', type:'dependency', label:'extends' },
+  { from:'s3', to:'n10', type:'toolCall', label:'apply() отсюда' },
+  { from:'n10', to:'n11', type:'skillInvoke', label:'camelCase → метод' },
+  { from:'n11', to:'n12', type:'dataFlow', label:'builder с where' },
+  { from:'n12', to:'n13', type:'dataFlow', label:'->get()' },
+  { from:'n13', to:'n14', type:'dataFlow', label:'Collection<Post>' },
+  { from:'n14', to:'n15', type:'dataFlow', label:'::collection()' },
+  { from:'n15', to:'n16', type:'dataFlow', label:'resolve() → JSON' },
+];
+
+const LAYER_META = {
+  'request-in':   { fill:'var(--client-fill)',    stroke:'var(--client-stroke)' },
+  routing:        { fill:'var(--routing-fill)',   stroke:'var(--routing-stroke)' },
+  scope:          { fill:'var(--scope-fill)',     stroke:'var(--scope-stroke)' },
+  filters:        { fill:'var(--filters-fill)',   stroke:'var(--filters-stroke)' },
+  execution:      { fill:'var(--execution-fill)', stroke:'var(--execution-stroke)' },
+  'response-out': { fill:'var(--client-fill)',    stroke:'var(--client-stroke)' },
+};
+
+const EDGE_META = {
+  dataFlow:    { marker:'arrow-blue' },
+  toolCall:    { marker:'arrow-green' },
+  skillInvoke: { marker:'arrow-orange' },
+  dependency:  { marker:'arrow-gray' },
+};
+
+const PRESETS = {
+  full:      { 'request-in':true,  routing:true,  scope:true,  filters:true, execution:true,  'response-out':true },
+  routing:   { 'request-in':true,  routing:true,  scope:false, filters:false,execution:false, 'response-out':false },
+  scope:     { 'request-in':false, routing:true,  scope:true,  filters:false,execution:false, 'response-out':false },
+  filters:   { 'request-in':false, routing:false, scope:true,  filters:true, execution:false, 'response-out':false },
+  execution: { 'request-in':false, routing:false, scope:false, filters:true, execution:true,  'response-out':true },
+};
+
+const state = {
+  layers: { 'request-in':true, routing:true, scope:true, filters:true, execution:true, 'response-out':true },
+  edgeTypes: { dataFlow:true, toolCall:true, skillInvoke:true, dependency:true },
+  zoom: 1,
+  comments: [],
+  activePreset: 'full',
+};
+
+const svg = document.getElementById('diagram');
+const edgesLayer = document.getElementById('edgesLayer');
+const nodesLayer = document.getElementById('nodesLayer');
+svg.setAttribute('viewBox', `0 0 ${CANVAS_W} ${CANVAS_H}`);
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function nodeById(id) { return NODES.find(n => n.id === id); }
+
+function anchor(node, side) {
+  if (side === 'top') return { x: node.x + node.w/2, y: node.y };
+  if (side === 'bottom') return { x: node.x + node.w/2, y: node.y + node.h };
+  if (side === 'left') return { x: node.x, y: node.y + node.h/2 };
+  return { x: node.x + node.w, y: node.y + node.h/2 };
+}
+
+function edgeGeometry(a, b) {
+  const sameColumn = Math.abs(a.x - b.x) < 10;
+  if (sameColumn) {
+    const goingDown = b.y >= a.y;
+    const p1 = anchor(a, goingDown ? 'bottom' : 'top');
+    const p2 = anchor(b, goingDown ? 'top' : 'bottom');
+    const midY = (p1.y + p2.y) / 2;
+    return { p1, p2, path: `M ${p1.x} ${p1.y} C ${p1.x} ${midY}, ${p2.x} ${midY}, ${p2.x} ${p2.y}` };
+  }
+  const goingRight = b.x >= a.x;
+  const p1 = anchor(a, goingRight ? 'right' : 'left');
+  const p2 = anchor(b, goingRight ? 'left' : 'right');
+  const midX = (p1.x + p2.x) / 2;
+  return { p1, p2, path: `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}` };
+}
+
+function drawEdge(edge) {
+  const a = nodeById(edge.from), b = nodeById(edge.to);
+  const geo = edgeGeometry(a, b);
+  const meta = EDGE_META[edge.type];
+  const g = svgEl('g', { class: 'edge' });
+
+  const path = svgEl('path', {
+    class: `edge-path edge-${edge.type}`,
+    d: geo.path,
+    'marker-end': `url(#${meta.marker})`,
+  });
+  g.appendChild(path);
+
+  const midX = (geo.p1.x + geo.p2.x) / 2;
+  const midY = (geo.p1.y + geo.p2.y) / 2;
+  const text = svgEl('text', { class: 'edge-label-text', x: midX, y: midY, 'text-anchor': 'middle' });
+  text.textContent = edge.label;
+
+  const bg = svgEl('rect', { class: 'edge-label-bg', rx: 3 });
+  g.appendChild(bg);
+  g.appendChild(text);
+  edgesLayer.appendChild(g);
+
+  const bbox = text.getBBox();
+  bg.setAttribute('x', bbox.x - 4);
+  bg.setAttribute('y', bbox.y - 2);
+  bg.setAttribute('width', bbox.width + 8);
+  bg.setAttribute('height', bbox.height + 4);
+}
+
+function drawNode(node) {
+  const meta = LAYER_META[node.layer];
+  const hasComment = state.comments.some(c => c.targetId === node.id);
+  const g = svgEl('g', { class: 'node', 'data-id': node.id });
+
+  const rect = svgEl('rect', {
+    x: node.x, y: node.y, width: node.w, height: node.h, rx: 10,
+    fill: meta.fill, stroke: hasComment ? 'var(--warn)' : meta.stroke,
+    'stroke-width': hasComment ? 2.5 : 1.5,
+  });
+  g.appendChild(rect);
+
+  const label = svgEl('text', { class: 'node-label', x: node.x + 16, y: node.y + 29 });
+  label.textContent = node.label;
+  g.appendChild(label);
+
+  const subtitle = svgEl('text', { class: 'node-subtitle', x: node.x + 16, y: node.y + 48 });
+  subtitle.textContent = node.subtitle;
+  g.appendChild(subtitle);
+
+  if (hasComment) {
+    g.appendChild(svgEl('circle', { cx: node.x + node.w - 15, cy: node.y + 15, r: 7, fill: 'var(--warn)' }));
+  }
+
+  g.addEventListener('click', () => openModal(node));
+  nodesLayer.appendChild(g);
+}
+
+function render() {
+  edgesLayer.innerHTML = '';
+  nodesLayer.innerHTML = '';
+  const visible = new Set(NODES.filter(n => state.layers[n.layer]).map(n => n.id));
+  EDGES.filter(e => visible.has(e.from) && visible.has(e.to) && state.edgeTypes[e.type]).forEach(drawEdge);
+  NODES.filter(n => visible.has(n.id)).forEach(drawNode);
+}
+
+function applyZoom() {
+  svg.style.width = (CANVAS_W * state.zoom) + 'px';
+  svg.style.height = (CANVAS_H * state.zoom) + 'px';
+}
+
+document.getElementById('zoomIn').addEventListener('click', () => { state.zoom = Math.min(2, +(state.zoom + 0.1).toFixed(2)); applyZoom(); });
+document.getElementById('zoomOut').addEventListener('click', () => { state.zoom = Math.max(0.4, +(state.zoom - 0.1).toFixed(2)); applyZoom(); });
+document.getElementById('zoomReset').addEventListener('click', () => { state.zoom = 1; applyZoom(); });
+
+function syncLayerCheckboxes() {
+  document.querySelectorAll('.layer-toggle input').forEach(cb => { cb.checked = !!state.layers[cb.dataset.layer]; });
+}
+function syncEdgeCheckboxes() {
+  document.querySelectorAll('.edge-toggle input').forEach(cb => { cb.checked = !!state.edgeTypes[cb.dataset.edge]; });
+}
+
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.layers = { ...PRESETS[btn.dataset.preset] };
+    state.activePreset = btn.dataset.preset;
+    syncLayerCheckboxes();
+    document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', b === btn));
+    render();
+    updatePrompt();
+  });
+});
+
+document.querySelectorAll('.layer-toggle input').forEach(cb => {
+  cb.addEventListener('change', () => {
+    state.layers[cb.dataset.layer] = cb.checked;
+    state.activePreset = null;
+    document.querySelectorAll('.preset').forEach(b => b.classList.remove('active'));
+    render();
+    updatePrompt();
+  });
+});
+
+document.querySelectorAll('.edge-toggle input').forEach(cb => {
+  cb.addEventListener('change', () => {
+    state.edgeTypes[cb.dataset.edge] = cb.checked;
+    render();
+  });
+});
+
+const modalOverlay = document.getElementById('modalOverlay');
+const modalTitle = document.getElementById('modalTitle');
+const modalSubtitle = document.getElementById('modalSubtitle');
+const modalDetail = document.getElementById('modalDetail');
+const modalComment = document.getElementById('modalComment');
+const modalDelete = document.getElementById('modalDelete');
+let modalTarget = null;
+
+function openModal(node) {
+  modalTarget = node;
+  modalTitle.textContent = node.label;
+  modalSubtitle.textContent = node.subtitle;
+  modalDetail.textContent = node.detail;
+  const existing = state.comments.find(c => c.targetId === node.id);
+  modalComment.value = existing ? existing.text : '';
+  modalDelete.style.display = existing ? 'inline-block' : 'none';
+  modalOverlay.classList.add('open');
+}
+function closeModal() { modalOverlay.classList.remove('open'); modalTarget = null; }
+
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+
+document.getElementById('modalSave').addEventListener('click', () => {
+  const text = modalComment.value.trim();
+  if (!text) { closeModal(); return; }
+  const idx = state.comments.findIndex(c => c.targetId === modalTarget.id);
+  const commentObj = { id: idx >= 0 ? state.comments[idx].id : Date.now(), targetId: modalTarget.id, targetLabel: modalTarget.label, targetFile: modalTarget.subtitle, text };
+  if (idx >= 0) state.comments[idx] = commentObj; else state.comments.push(commentObj);
+  closeModal();
+  render();
+  renderComments();
+  updatePrompt();
+});
+
+document.getElementById('modalDelete').addEventListener('click', () => {
+  state.comments = state.comments.filter(c => c.targetId !== modalTarget.id);
+  closeModal();
+  render();
+  renderComments();
+  updatePrompt();
+});
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderComments() {
+  const list = document.getElementById('commentsList');
+  document.getElementById('commentCount').textContent = state.comments.length;
+  list.innerHTML = '';
+  if (!state.comments.length) {
+    list.innerHTML = '<div class="empty-hint">Кликни по узлу схемы, чтобы посмотреть код шага и оставить свой вопрос или заметку.</div>';
+    return;
+  }
+  state.comments.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.innerHTML = `<div class="comment-target">${escapeHtml(c.targetLabel)}</div><div class="comment-text">${escapeHtml(c.text)}</div>`;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'comment-del';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', () => {
+      state.comments = state.comments.filter(x => x.id !== c.id);
+      render(); renderComments(); updatePrompt();
+    });
+    item.appendChild(delBtn);
+    list.appendChild(item);
+  });
+}
+
+const LAYER_NAMES = {
+  'request-in': 'Входящий запрос', routing: 'Роутинг и валидация',
+  scope: 'Поиск scopeFilter (Eloquent Local Scope)', filters: 'Классы фильтров (PostFilter/AbstractFilter)',
+  execution: 'Выполнение запроса и ресурсы', 'response-out': 'JSON-ответ',
+};
+
+function updatePrompt() {
+  const activeLayers = Object.keys(state.layers).filter(k => state.layers[k]);
+  const parts = [];
+  parts.push('Схема обработки запроса на фильтрацию списка постов (GET /api/posts) в проекте Line: путь от HTTP-запроса до JSON-ответа через маршрутизацию, валидацию IndexRequest, разрешение Eloquent Local Scope (Builder::filter() -> Post::scopeFilter()), классы App\\Filters\\PostFilter и AbstractFilter, и формирование ответа через PostResource.');
+  if (activeLayers.length < 6) {
+    parts.push(`Сейчас показаны слои: ${activeLayers.map(k => LAYER_NAMES[k]).join(', ')}.`);
+  }
+  if (state.comments.length) {
+    parts.push('\nЗаметки/вопросы по конкретным шагам:');
+    state.comments.forEach(c => parts.push(`\n**${c.targetLabel}** (${c.targetFile}):\n${c.text}`));
+  }
+  document.getElementById('promptText').textContent = parts.join('\n');
+}
+
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('copyBtn');
+  try {
+    await navigator.clipboard.writeText(document.getElementById('promptText').textContent);
+    btn.textContent = 'Скопировано!';
+  } catch (e) {
+    btn.textContent = 'Не удалось скопировать';
+  }
+  setTimeout(() => btn.textContent = 'Скопировать', 1200);
+});
+
+syncLayerCheckboxes();
+syncEdgeCheckboxes();
+render();
+applyZoom();
+renderComments();
+updatePrompt();
+</script>
+</body>
+</html>
