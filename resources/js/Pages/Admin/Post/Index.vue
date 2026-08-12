@@ -23,7 +23,7 @@
                         <th class="px-4 py-3 text-left font-medium">Заголовок</th>
                         <th class="px-4 py-3 text-left font-medium">Категория</th>
                         <th class="px-4 py-3 text-left font-medium">Автор</th>
-                        <th class="px-4 py-3 text-left font-medium">Статус</th>
+                        <th class="px-4 py-3 text-left font-medium">Изображения</th>
                         <th class="px-4 py-3 text-left font-medium">Опубликован</th>
                     </tr>
                 </thead>
@@ -72,13 +72,27 @@
                             #{{ post.author_id }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-4">
-                            <span
-                                class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statusClasses[post.status] ?? 'bg-gray-100 text-gray-600'"
-                            >
-                                {{ statuses[post.status] ?? 'Неизвестно' }}
-                            </span>
+                        <!--
+                            URL картинки собирает ImageResource на бэке
+                            (Storage::disk('public')->url()), клиент только подставляет
+                            готовую строку в href. rel="noopener" — обязательный спутник
+                            target="_blank": без него открытая вкладка получает доступ
+                            к window.opener.
+                        -->
+                        <td class="px-4 py-4">
+                            <ul v-if="post.images?.length" class="space-y-1">
+                                <li v-for="(image, index) in post.images" :key="image.id">
+                                    <a
+                                        :href="image.url"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="text-sky-700 underline hover:text-sky-900"
+                                    >
+                                        Изображение {{ index + 1 }}
+                                    </a>
+                                </li>
+                            </ul>
+                            <span v-else class="text-gray-400">—</span>
                         </td>
 
                         <td class="whitespace-nowrap px-4 py-4 text-gray-500">
@@ -110,19 +124,6 @@ export default {
             type: Array,
             default: () => [],
         },
-        statuses: {
-            type: Object,
-            default: () => ({}),
-        },
-    },
-    data() {
-        return {
-            // Ключи повторяют константы Post::STATUS_* — на клиенте их взять неоткуда.
-            statusClasses: {
-                1: 'bg-emerald-50 text-emerald-700',
-                2: 'bg-amber-50 text-amber-700',
-            },
-        };
     },
     methods: {
         excerpt(text, limit = 140) {

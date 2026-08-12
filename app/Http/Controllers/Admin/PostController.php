@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Post\StoreRequest;
+use App\Http\Resources\Category\CategoryResource;
 use App\Http\Resources\Post\PostResource;
+use App\Models\Category;
 use App\Models\Post;
+use App\Services\PostService;
 use Inertia\Response;
 
 class PostController extends Controller {
@@ -16,22 +19,29 @@ class PostController extends Controller {
      * относительно resources/js/Pages/, второй — props, которые получит компонент.
      */
     public function index(): Response {
+        // images грузим заранее: без eager loading каждая строка таблицы дала бы
+        // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
         $posts = Post::query()
-            ->with('category')
+            ->with(['category', 'images'])
             ->latest('id')
             ->get();
 
         return inertia('Admin/Post/Index', [
             'posts' => PostResource::collection($posts)->resolve(),
-            'statuses' => Post::getStatuses(),
         ]);
     }
 
     /**
      * Страница с формой создания поста.
+     *
+     * Категория — справочник в БД, поэтому список вариантов для <select> не хардкодится
+     * в шаблоне, а уезжает пропсом. Через ресурс, а не Category::all(): CategoryResource
+     * отдаёт только id и title — ровно то, что нужно для <option>, без служебных полей.
      */
     public function create(): Response {
-        return inertia('Admin/Post/Create');
+        $categories = CategoryResource::collection(Category::all())->resolve();
+
+        return inertia('Admin/Post/Create', compact('categories'));
     }
 
     /**
@@ -45,11 +55,10 @@ class PostController extends Controller {
     public function store(StoreRequest $request): array {
         $data = $request->validated();
 
-        // posts.author_id — NOT NULL, а выбора автора в форме пока нет.
-        // TODO: заменить на выбранного автора, когда дойдём до этой темы.
-        $data['author_id'] = 1;
-
-        $post = Post::create($data);
+        // Контроллер отвечает только за HTTP: валидированные данные → сервис → ресурс.
+        // Как именно создаётся пост (файлы, связи), знает PostService — эта логика
+        // понадобится ещё и API-контроллеру, и консольной команде.
+        $post = PostService::store($data);
 
         return PostResource::make($post)->resolve();
     }
