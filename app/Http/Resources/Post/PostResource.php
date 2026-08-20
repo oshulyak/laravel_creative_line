@@ -4,6 +4,7 @@ namespace App\Http\Resources\Post;
 
 use App\Http\Resources\Category\CategoryResource;
 use App\Http\Resources\Image\ImageResource;
+use App\Http\Resources\Tag\TagResource;
 use App\Models\Category;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -37,6 +38,10 @@ class PostResource extends JsonResource {
             'images' => $this->whenLoaded(
                 'images',
                 fn (Collection $images): array => ImageResource::collection($images)->resolve(),
+            ),
+            'tags' => $this->whenLoaded(
+                'tags',
+                fn (Collection $tags): array => TagResource::collection($tags)->resolve(),
             ),
         ];
     }

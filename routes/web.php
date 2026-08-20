@@ -42,6 +42,11 @@ Route::middleware('auth')->group(function () {
     // POST-роут в web.php проходит CSRF-проверку: axios сам подставит заголовок X-XSRF-TOKEN
     // из куки XSRF-TOKEN, потому что запрос уходит на тот же домен.
     Route::post('/admin/posts', [PostController::class, 'store'])->name('admin.posts.store');
+    // whereNumber ограничивает сегмент регуляркой [0-9]+, поэтому /admin/posts/create
+    // не может попасть в параметр {post} — маршрут перестаёт зависеть от порядка объявления.
+    Route::get('/admin/posts/{post}', [PostController::class, 'show'])
+        ->whereNumber('post')
+        ->name('admin.posts.show');
 });
 
 require __DIR__.'/auth.php';

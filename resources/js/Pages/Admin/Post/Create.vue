@@ -54,6 +54,17 @@
             @change="handleImages"
         />
 
+        <!--
+            Теги вводятся одной строкой через запятую и уходят на бэк как есть:
+            разбор — правило приложения, а не формы. Клиентов может быть несколько
+            (форма, API, импорт), и данным от клиента всё равно нельзя доверять.
+        -->
+        <textarea
+            v-model="tags"
+            placeholder="теги через запятую"
+            class="mb-4 w-full border border-gray-200 p-4"
+        ></textarea>
+
         <a
             href="#"
             class="inline-block bg-teal-700 px-3 py-2 text-xs text-white hover:bg-teal-800"
@@ -90,7 +101,8 @@ export default {
      * Поля перечислены явно, а не через `post: {}`: пустой объект не содержал бы
      * ключей нетронутых полей, и на бэк ушёл бы запрос без них.
      *
-     * images лежат отдельно от post: это объекты File, а не значения формы.
+     * images и tags лежат отдельно от post: в post собраны только колонки таблицы posts,
+     * он целиком уходит в Post::create(). Изображения и теги — это связи.
      *
      * published_at здесь нет: дату публикации проставляет сервер (см. StoreRequest),
      * клиент на неё не влияет.
@@ -103,6 +115,7 @@ export default {
                 category_id: null,
             },
             images: [],
+            tags: '',
         };
     },
     methods: {
@@ -130,6 +143,8 @@ export default {
                 formData.append('images[]', image);
             });
 
+            formData.append('tags', this.tags);
+
             // Приложение — монолит, поэтому URL берём у Ziggy по имени роута.
             axios
                 .post(route('admin.posts.store'), formData)
@@ -144,6 +159,7 @@ export default {
                         category_id: null,
                     };
                     this.images = [];
+                    this.tags = '';
                     this.$refs.imagesInput.value = '';
                 })
                 .catch((e) => {

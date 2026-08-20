@@ -19,10 +19,11 @@ class PostController extends Controller {
      * относительно resources/js/Pages/, второй — props, которые получит компонент.
      */
     public function index(): Response {
-        // images грузим заранее: без eager loading каждая строка таблицы дала бы
+        // category грузим заранее: без eager loading каждая строка таблицы дала бы
         // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
+        // images списку больше не нужны — их показывает только страница просмотра.
         $posts = Post::query()
-            ->with(['category', 'images'])
+            ->with('category')
             ->latest('id')
             ->get();
 
@@ -42,6 +43,25 @@ class PostController extends Controller {
         $categories = CategoryResource::collection(Category::all())->resolve();
 
         return inertia('Admin/Post/Create', compact('categories'));
+    }
+
+    /**
+     * Страница просмотра одного поста.
+     *
+     * Тайп-хинт Post $post — неявная привязка модели (route model binding): Laravel сам
+     * находит запись по сегменту {post} и отдаёт 404, если её нет. Имя параметра в роуте
+     * и имя аргумента обязаны совпадать.
+     *
+     * Связи грузим через load(), а не with(): модель уже готова, запрос строил контейнер.
+     * Без load() ключи category/images/tags молча исчезнут из ответа — их отдаёт
+     * whenLoaded() в PostResource.
+     */
+    public function show(Post $post): Response {
+        $post->load(['category', 'images', 'tags']);
+
+        return inertia('Admin/Post/Show', [
+            'post' => PostResource::make($post)->resolve(),
+        ]);
     }
 
     /**

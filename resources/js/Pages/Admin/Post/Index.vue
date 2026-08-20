@@ -23,7 +23,6 @@
                         <th class="px-4 py-3 text-left font-medium">Заголовок</th>
                         <th class="px-4 py-3 text-left font-medium">Категория</th>
                         <th class="px-4 py-3 text-left font-medium">Автор</th>
-                        <th class="px-4 py-3 text-left font-medium">Изображения</th>
                         <th class="px-4 py-3 text-left font-medium">Опубликован</th>
                     </tr>
                 </thead>
@@ -53,8 +52,18 @@
                             </div>
                         </td>
 
+                        <!--
+                            Link, а не <a href>: обычная ссылка перезагрузила бы страницу
+                            целиком, Link делает XHR и подменяет только компонент страницы.
+                            Второй аргумент route() — значение сегмента {post}.
+                        -->
                         <td class="max-w-md px-4 py-4">
-                            <p class="font-medium text-gray-900">{{ post.title }}</p>
+                            <Link
+                                :href="route('admin.posts.show', post.id)"
+                                class="font-medium text-sky-700 hover:underline"
+                            >
+                                {{ post.title }}
+                            </Link>
                             <p class="mt-1 text-gray-500">{{ excerpt(post.content) }}</p>
                         </td>
 
@@ -72,36 +81,13 @@
                             #{{ post.author_id }}
                         </td>
 
-                        <!--
-                            URL картинки собирает ImageResource на бэке
-                            (Storage::disk('public')->url()), клиент только подставляет
-                            готовую строку в href. rel="noopener" — обязательный спутник
-                            target="_blank": без него открытая вкладка получает доступ
-                            к window.opener.
-                        -->
-                        <td class="px-4 py-4">
-                            <ul v-if="post.images?.length" class="space-y-1">
-                                <li v-for="(image, index) in post.images" :key="image.id">
-                                    <a
-                                        :href="image.url"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="text-sky-700 underline hover:text-sky-900"
-                                    >
-                                        Изображение {{ index + 1 }}
-                                    </a>
-                                </li>
-                            </ul>
-                            <span v-else class="text-gray-400">—</span>
-                        </td>
-
                         <td class="whitespace-nowrap px-4 py-4 text-gray-500">
                             {{ formatDate(post.published_at) ?? '—' }}
                         </td>
                     </tr>
 
                     <tr v-if="!posts.length">
-                        <td colspan="7" class="px-4 py-10 text-center text-gray-500">
+                        <td colspan="6" class="px-4 py-10 text-center text-gray-500">
                             Публикаций пока нет.
                         </td>
                     </tr>
