@@ -1,12 +1,25 @@
 <template>
     <Head :title="post.title" />
 
-    <Link
-        :href="route('admin.posts.index')"
-        class="mb-4 inline-block bg-sky-700 px-3 py-2 text-xs text-white hover:bg-sky-800"
-    >
-        Посты
-    </Link>
+    <!--
+        Обе кнопки — Link, а не <a href>: переход на форму редактирования это обычный
+        GET-переход, Inertia подменит только компонент страницы, layout останется на месте.
+    -->
+    <div class="mb-4 flex gap-2">
+        <Link
+            :href="route('admin.posts.index')"
+            class="inline-block bg-sky-700 px-3 py-2 text-xs text-white hover:bg-sky-800"
+        >
+            Посты
+        </Link>
+
+        <Link
+            :href="route('admin.posts.edit', post.id)"
+            class="inline-block bg-amber-600 px-3 py-2 text-xs text-white hover:bg-amber-700"
+        >
+            Редактировать
+        </Link>
+    </div>
 
     <article class="rounded-lg bg-white p-6 shadow">
         <h3 class="mb-2 text-2xl font-semibold text-gray-900">{{ post.title }}</h3>

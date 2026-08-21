@@ -47,6 +47,17 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/posts/{post}', [PostController::class, 'show'])
         ->whereNumber('post')
         ->name('admin.posts.show');
+    // Вторая пара ресурсной конвенции: edit отдаёт страницу с формой (GET),
+    // update сохраняет изменения — как create + store, но для существующей записи.
+    Route::get('/admin/posts/{post}/edit', [PostController::class, 'edit'])
+        ->whereNumber('post')
+        ->name('admin.posts.edit');
+    // PATCH, а не PUT: форма присылает часть колонок (title, content, category_id),
+    // а author_id, status и published_at не трогает. PUT по семантике заменял бы
+    // ресурс целиком. Laravel их не различает — разницу задают правила и сервис.
+    Route::patch('/admin/posts/{post}', [PostController::class, 'update'])
+        ->whereNumber('post')
+        ->name('admin.posts.update');
 });
 
 require __DIR__.'/auth.php';

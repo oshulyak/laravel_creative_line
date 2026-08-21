@@ -24,6 +24,7 @@
                         <th class="px-4 py-3 text-left font-medium">Категория</th>
                         <th class="px-4 py-3 text-left font-medium">Автор</th>
                         <th class="px-4 py-3 text-left font-medium">Опубликован</th>
+                        <th class="px-4 py-3 text-right font-medium">Действия</th>
                     </tr>
                 </thead>
 
@@ -84,10 +85,23 @@
                         <td class="whitespace-nowrap px-4 py-4 text-gray-500">
                             {{ formatDate(post.published_at) ?? '—' }}
                         </td>
+
+                        <!--
+                            Ссылка, а не кнопка: переход на форму редактирования —
+                            обычный GET. Второй аргумент route() — сегмент {post}.
+                        -->
+                        <td class="whitespace-nowrap px-4 py-4 text-right">
+                            <Link
+                                :href="route('admin.posts.edit', post.id)"
+                                class="inline-block bg-amber-600 px-3 py-2 text-xs text-white hover:bg-amber-700"
+                            >
+                                Редактировать
+                            </Link>
+                        </td>
                     </tr>
 
                     <tr v-if="!posts.length">
-                        <td colspan="6" class="px-4 py-10 text-center text-gray-500">
+                        <td colspan="7" class="px-4 py-10 text-center text-gray-500">
                             Публикаций пока нет.
                         </td>
                     </tr>

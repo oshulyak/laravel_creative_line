@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Post;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ImageService {
@@ -33,5 +34,35 @@ class ImageService {
                 'img_path' => Storage::disk('public')->put('/images', $image),
             ]);
         }
+    }
+
+    /**
+     * Удаляет изображения поста: строки — сразу, файлы — после успешного коммита.
+     *
+     * @param  list<int>  $imageIds
+     */
+    public static function deleteBatch(array $imageIds, Post $post): void {
+        // Ранний выход: без него ушёл бы бессмысленный select ... where id in ().
+        // Строгое сравнение с пустым массивом читается однозначнее, чем empty().
+        if ($imageIds === []) {
+            return;
+        }
+
+        // Выбираем через связь поста, а не Image::whereIn(...): чужой id просто
+        // не попадёт в выборку, даже если правило валидации кто-то ослабит.
+        $images = $post->images()->whereIn('id', $imageIds)->get();
+
+        $paths = $images->pluck('img_path')->all();
+
+        // Удаляем по одной модели, а не запросом ->delete(): так срабатывают события
+        // Eloquent, а вместе с ними логирование из трейта HasLog. each->delete() —
+        // higher order message, сокращение для each(fn (Image $image) => $image->delete()).
+        $images->each->delete();
+
+        // Файлы стираем только после коммита. Сделай мы это сразу — откат транзакции
+        // вернул бы строки в БД, но не файлы с диска: в списке появились бы битые картинки.
+        // Вне транзакции afterCommit() выполняет колбэк немедленно.
+        // Storage::delete() принимает массив и молча пропускает несуществующие пути.
+        DB::afterCommit(fn () => Storage::disk('public')->delete($paths));
     }
 }
