@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Post\IndexRequest;
 use App\Http\Requests\Admin\Post\StoreRequest;
 use App\Http\Requests\Admin\Post\UpdateRequest;
 use App\Http\Resources\Category\CategoryResource;
@@ -14,23 +15,38 @@ use Inertia\Response;
 
 class PostController extends Controller {
     /**
-     * Список постов для админки.
+     * Список постов для админки — он же источник данных для фильтра.
      *
-     * Вместо view() возвращаем Inertia-страницу: первый аргумент — путь к компоненту
-     * относительно resources/js/Pages/, второй — props, которые получит компонент.
+     * Один URL отдаёт два формата: Inertia-страницу при обычном переходе и голый JSON
+     * при запросе от axios, когда меняются поля фильтра. Отдельный маршрут не нужен —
+     * данные те же, отличается только упаковка ответа.
+     *
+     * @return array<int, array<string, mixed>>|Response
      */
-    public function index(): Response {
+    public function index(IndexRequest $request): array|Response {
+        // filter() — scope из трейта HasFilter: он сам находит PostFilter по имени модели
+        // и применяет только те ключи, которые пришли в validated(). Фильтр не привязан
+        // к API — тот же механизм из 13-го урока работает и здесь.
+        //
         // category грузим заранее: без eager loading каждая строка таблицы дала бы
         // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
-        // images списку больше не нужны — их показывает только страница просмотра.
+        // withCount добавляет к каждому посту liked_by_profiles_count одним подзапросом.
         $posts = Post::query()
+            ->filter($request->validated())
             ->with('category')
+            ->withCount('likedByProfiles')
             ->latest('id')
             ->get();
 
-        return inertia('Admin/Post/Index', [
-            'posts' => PostResource::collection($posts)->resolve(),
-        ]);
+        $posts = PostResource::collection($posts)->resolve();
+
+        // Запросы различает заголовок Accept: axios просит application/json,
+        // Inertia — text/html. Проверку делаем до inertia(), иначе axios получит
+        // HTML целой страницы вместо массива постов.
+        //
+        // Именно wantsJson(), а не expectsJson(): второй возвращает true для любого
+        // XHR-запроса, а Inertia шлёт X-Requested-With — и страница бы сломалась.
+        return $request->wantsJson() ? $posts : inertia('Admin/Post/Index', compact('posts'));
     }
 
     /**

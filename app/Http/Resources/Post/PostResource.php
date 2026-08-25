@@ -26,6 +26,11 @@ class PostResource extends JsonResource {
             'img_path' => $this->img_path,
             'status' => $this->status,
             'published_at' => $this->published_at,
+            // whenCounted — брат whenLoaded для withCount(): ключ появится в ответе,
+            // только если счётчик действительно посчитан. Имя атрибута ресурс выведет
+            // сам: likedByProfiles → liked_by_profiles_count. Наружу отдаём короткое
+            // likes_count — внутреннее представление и внешний контракт не обязаны совпадать.
+            'likes_count' => $this->whenCounted('likedByProfiles'),
             // whenLoaded: ключ появится в ответе, только если связь уже загружена, —
             // так ресурс не спровоцирует лишний запрос там, где связь не нужна.
             // Вложенный ресурс обязательно разворачиваем ->resolve(): иначе в массиве

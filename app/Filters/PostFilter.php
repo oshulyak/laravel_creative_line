@@ -19,6 +19,7 @@ class PostFilter extends AbstractFilter {
         'content',
         'img_path',
         'status',
+        'likes_from',
         'published_at_from',
         'published_at_to',
         'created_at_from',
@@ -57,6 +58,19 @@ class PostFilter extends AbstractFilter {
 
     protected function status(Builder $builder, int|string $value): void {
         $builder->where('status', (int) $value);
+    }
+
+    /**
+     * Посты, у которых лайков не меньше указанного числа.
+     *
+     * Лайк — это строка в likeables, а не колонка в posts, поэтому фильтруем не по полю,
+     * а по количеству записей в связи: has() строит коррелированный подзапрос-счётчик.
+     *
+     * withCount() + having() здесь не подходит: в PostgreSQL HAVING не видит алиасы
+     * из SELECT, и запрос упал бы с «column liked_by_profiles_count does not exist».
+     */
+    protected function likesFrom(Builder $builder, int|string $value): void {
+        $builder->has('likedByProfiles', '>=', (int) $value);
     }
 
     protected function publishedAtFrom(Builder $builder, string $value): void {
