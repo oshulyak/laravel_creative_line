@@ -11,41 +11,64 @@ use App\Http\Resources\Post\PostResource;
 use App\Models\Category;
 use App\Models\Post;
 use App\Services\PostService;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Inertia\Response;
 
 class PostController extends Controller {
     /**
-     * Список постов для админки — он же источник данных для фильтра.
+     * Список постов для админки — он же источник данных для фильтра и пагинации.
      *
      * Один URL отдаёт два формата: Inertia-страницу при обычном переходе и голый JSON
-     * при запросе от axios, когда меняются поля фильтра. Отдельный маршрут не нужен —
-     * данные те же, отличается только упаковка ответа.
-     *
-     * @return array<int, array<string, mixed>>|Response
+     * при запросе от axios, когда меняются поля фильтра или номер страницы. Отдельный
+     * маршрут не нужен — данные те же, отличается только упаковка ответа.
      */
-    public function index(IndexRequest $request): array|Response {
+    public function index(IndexRequest $request): AnonymousResourceCollection|Response {
+        $data = $request->validated();
+
         // filter() — scope из трейта HasFilter: он сам находит PostFilter по имени модели
-        // и применяет только те ключи, которые пришли в validated(). Фильтр не привязан
-        // к API — тот же механизм из 13-го урока работает и здесь.
+        // и применяет только те ключи, которые пришли в validated(). Фильтру достаётся
+        // блок filters: группировка — это про контракт HTTP, сам PostFilter не изменился.
+        //
+        // ?? [] обязателен: у контейнера с правилом array и вложенными правилами
+        // validated() возвращает только реально пришедшие вложенные ключи, а сам контейнер
+        // пропускает. Пустая форма — и ключа filters в $data нет (подробности в IndexRequest).
+        // У pagination той же проблемы нет: prepareForValidation() всегда пишет оба
+        // вложенных ключа, поэтому блок в validated() всегда собирается.
         //
         // category грузим заранее: без eager loading каждая строка таблицы дала бы
         // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
-        // withCount добавляет к каждому посту liked_by_profiles_count одним подзапросом.
+        // Пагинация N+1 не отменяет: пять строк дадут пять лишних запросов вместо тысячи —
+        // меньше, но не «можно».
+        //
+        // latest('id') теперь обязателен: offset без order by не даёт PostgreSQL никаких
+        // гарантий порядка, и одна запись может приехать сразу на двух страницах.
+        //
+        // paginate() идёт последним — он не достраивает запрос, а выполняет его двумя
+        // запросами (count(*) плюс limit/offset) и возвращает LengthAwarePaginator вместо
+        // билдера. Аргументы: записей на странице, колонки, имя query-параметра и номер
+        // страницы. Номер передаём явно, потому что он приезжает в pagination[page],
+        // а встроенный резолвер Laravel читает только плоский ?page=.
         $posts = Post::query()
-            ->filter($request->validated())
+            ->filter($data['filters'] ?? [])
             ->with('category')
             ->withCount('likedByProfiles')
             ->latest('id')
-            ->get();
+            ->paginate($data['pagination']['per_page'], ['*'], 'page', $data['pagination']['page']);
 
-        $posts = PostResource::collection($posts)->resolve();
+        // ->resolve() здесь больше нет: он разворачивает ресурс в голый массив элементов
+        // и выбросил бы meta и links. Обёртка data из помехи стала частью контракта.
+        $posts = PostResource::collection($posts);
 
         // Запросы различает заголовок Accept: axios просит application/json,
         // Inertia — text/html. Проверку делаем до inertia(), иначе axios получит
-        // HTML целой страницы вместо массива постов.
+        // HTML целой страницы вместо данных.
         //
         // Именно wantsJson(), а не expectsJson(): второй возвращает true для любого
         // XHR-запроса, а Inertia шлёт X-Requested-With — и страница бы сломалась.
+        //
+        // Обе ветки отдают одинаковую структуру { data, links, meta }: JSON-ветка — через
+        // интерфейс Responsable в роутере, Inertia-ветка — потому что у Responsable-пропа
+        // resolvePropertyInstances() зовёт тот же toResponse().
         return $request->wantsJson() ? $posts : inertia('Admin/Post/Index', compact('posts'));
     }
 

@@ -3,7 +3,11 @@
 
     <header class="mb-6 flex items-baseline justify-between">
         <h3 class="text-2xl font-semibold text-gray-900">Posts</h3>
-        <span class="text-sm text-gray-500">Всего: {{ postsData.length }}</span>
+        <!--
+            meta.total — не длина массива на экране, а число постов, подошедших
+            под фильтр целиком. Ради него пагинатор и делает второй запрос count(*).
+        -->
+        <span class="text-sm text-gray-500">Всего: {{ postsData.meta.total }}</span>
     </header>
 
     <Link
@@ -25,7 +29,7 @@
                 Заголовок
             </span>
             <input
-                v-model="filter.title"
+                v-model="entries.filters.title"
                 type="text"
                 placeholder="часть заголовка"
                 class="w-full border border-gray-300 px-3 py-2 text-sm"
@@ -41,7 +45,7 @@
                 строку вида 2026-06-01 — под неё написано правило date_format:Y-m-d.
             -->
             <input
-                v-model="filter.published_at_from"
+                v-model="entries.filters.published_at_from"
                 type="date"
                 class="w-full border border-gray-300 px-3 py-2 text-sm"
             />
@@ -52,7 +56,7 @@
                 Лайков не меньше
             </span>
             <input
-                v-model.number="filter.likes_from"
+                v-model.number="entries.filters.likes_from"
                 type="number"
                 min="0"
                 class="w-full border border-gray-300 px-3 py-2 text-sm"
@@ -78,7 +82,7 @@
 
                 <tbody class="divide-y divide-gray-100">
                     <tr
-                        v-for="post in postsData"
+                        v-for="post in postsData.data"
                         :key="post.id"
                         class="align-top transition-colors hover:bg-gray-50"
                     >
@@ -157,7 +161,7 @@
                         </td>
                     </tr>
 
-                    <tr v-if="!postsData.length">
+                    <tr v-if="!postsData.data.length">
                         <td colspan="8" class="px-4 py-10 text-center text-gray-500">
                             Публикаций пока нет.
                         </td>
@@ -165,6 +169,82 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <!--
+        Нижняя панель списка: слева номера страниц, справа размер страницы.
+        v-if стоит на самих кнопках, а не на этой обёртке: селект нужен всегда,
+        иначе после выбора «по 25» список схлопнется в одну страницу, кнопки
+        исчезнут вместе с селектом — и вернуться к «по 5» станет нечем.
+    -->
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+        <!--
+            Кнопки страниц строим по meta.links — Laravel уже посчитал, какие номера
+            показать, какой активен и где поставить «...». Одна страница — переключатель
+            не нужен, но meta.links в этом случае всё равно вернёт «Previous», «1», «Next»,
+            поэтому нужна проверка last_page.
+        -->
+        <nav v-if="postsData.meta.last_page > 1" class="flex flex-wrap gap-1">
+            <!--
+                :key="index", а не link.page: у «...» и у неактивных стрелок page равен null,
+                и ключи бы совпали. Список статичен по структуре — он не сортируется,
+                а перерисовывается целиком, поэтому индекс здесь допустим.
+
+                :disabled — у разделителя и у неактивных стрелок url равен null, кликать
+                по ним нечего; активную страницу блокируем, чтобы не перезапрашивать
+                то, что уже на экране.
+
+                v-html вместо {{ }}: в label лежат HTML-сущности &laquo; и &raquo; из
+                языкового файла фреймворка, интерполяция показала бы их буквально.
+                Источник строки — сам Laravel, а не пользовательский ввод, поэтому XSS тут нет.
+
+                link.page, а не link.label: в page уже лежит номер числом. Разбор label
+                строкой отправил бы в запрос «&laquo; Previous» и получил 422.
+            -->
+            <button
+                v-for="(link, index) in postsData.meta.links"
+                :key="index"
+                type="button"
+                :disabled="!link.url || link.active"
+                class="border px-3 py-2 text-sm disabled:cursor-default disabled:text-gray-300"
+                :class="
+                    link.active
+                        ? 'border-sky-800 bg-sky-700 text-white'
+                        : 'border-gray-300 bg-white hover:bg-gray-50'
+                "
+                @click="entries.pagination.page = link.page"
+                v-html="link.label"
+            ></button>
+        </nav>
+
+        <!--
+            ml-auto, а не justify-between у обёртки: прижимать селект вправо должен
+            он сам, иначе при спрятанных кнопках он уехал бы в левый край.
+        -->
+        <label class="ml-auto flex items-center gap-5 text-sm text-gray-500">
+            <span>На странице</span>
+            <!--
+                :value="5", а не value="5": без двоеточия в <option> уехала бы строка,
+                и v-model.number потерял бы смысл.
+
+                @change сбрасывает страницу: после «по 25 записей» третьей страницы
+                может уже не существовать. Наблюдатель за pagination при этом сработает
+                один раз — оба изменения попадут в один debounce.
+
+                Ширина задана явно (w-24 = 96px вместо ≈64px по содержимому): без неё
+                select менял бы размер вслед за длиной выбранного варианта, и соседние
+                кнопки пагинации дёргались бы при каждом переключении.
+            -->
+            <select
+                v-model.number="entries.pagination.per_page"
+                class="w-12 border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                @change="entries.pagination.page = 1"
+            >
+                <option :value="5">5</option>
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+            </select>
+        </label>
     </div>
 </template>
 
@@ -179,56 +259,87 @@ export default {
     components: { Head, Link },
     props: {
         posts: {
-            type: Array,
-            default: () => [],
+            // Object, а не Array: постраничный ответ — это { data, links, meta }.
+            type: Object,
+            // Заглушка обязана повторять форму настоящего ответа: шаблон обращается
+            // к postsData.meta.links и meta.total ещё до первого запроса.
+            // Фабрика, а не литерал: иначе все экземпляры делили бы один объект.
+            default: () => ({ data: [], meta: { links: [], total: 0 } }),
         },
     },
     data() {
         return {
-            // Ключи в snake_case не случайно: filter — не внутреннее состояние компонента,
-            // а набор query-параметров. Его ключи уезжают в URL как есть и обязаны совпадать
-            // с правилами Admin\Post\IndexRequest и со списком $keys у PostFilter.
-            filter: {
-                title: '',
-                published_at_from: '',
-                likes_from: null,
+            // Структура повторяет контракт IndexRequest: два блока, snake_case внутри.
+            // Весь объект целиком уезжает в params, поэтому имена ключей обязаны совпадать
+            // с правилами валидации и со списком $keys у PostFilter.
+            entries: {
+                filters: {
+                    title: '',
+                    published_at_from: '',
+                    likes_from: null,
+                },
+                pagination: {
+                    page: 1,
+                    per_page: 5,
+                },
             },
-            // Что показывает таблица: сначала то, что приехало пропсом, потом — ответ сервера.
-            // Пропс менять нельзя (однонаправленный поток данных), поэтому нужна своя копия.
-            // Копия здесь — тот же массив, а не глубокий клон; безопасно только потому,
-            // что мы всегда заменяем postsData целиком, а не мутируем его.
+            // Ответ сервера целиком: { data, links, meta }. Сначала то, что приехало пропсом,
+            // потом — то, что вернул axios; форма у них одинаковая. Пропс менять нельзя
+            // (однонаправленный поток данных), поэтому нужна своя копия. Копия здесь — та же
+            // ссылка, а не глубокий клон; безопасно только потому, что мы всегда заменяем
+            // postsData целиком, а не мутируем его.
             postsData: this.posts,
             // Идентификатор отложенного вызова filterPosts() для debounce.
             timerId: null,
         };
     },
     watch: {
-        filter: {
-            // Каждое изменение отменяет предыдущий отложенный вызов и ставит новый:
-            // запрос уходит через 400 мс после последнего нажатия клавиши, а не на каждую букву.
+        // Имя наблюдаемого — путь, а не только корневой ключ: 'entries.filters' избавляет
+        // от промежуточного computed. deep нужен обоим по той же причине, что и в 19-м уроке:
+        // меняется свойство внутри объекта, а ссылка на сам объект остаётся прежней.
+        'entries.filters': {
             handler() {
-                clearTimeout(this.timerId);
-                this.timerId = setTimeout(this.filterPosts, 400);
+                // Новый фильтр — снова с первой страницы: на третьей может уже не остаться
+                // результатов, и пользователь увидел бы пустой список.
+                this.entries.pagination.page = 1;
+                this.scheduleFilterPosts();
             },
-            // Без deep наблюдатель молчит: при вводе меняется свойство filter.title,
-            // а ссылка на сам объект filter остаётся прежней.
+            deep: true,
+        },
+        // Отдельный наблюдатель, а не общий за entries: общий не различает, что именно
+        // изменилось, и сбрасывал бы page = 1 в том числе при клике по кнопке «2».
+        'entries.pagination': {
+            handler() {
+                this.scheduleFilterPosts();
+            },
             deep: true,
         },
     },
     methods: {
+        /**
+         * Общая точка входа для обоих наблюдателей: откладывает запрос на 400 мс
+         * и отменяет предыдущий отложенный. Заодно склеивает два срабатывания
+         * (смена фильтра + сброс страницы) в один запрос — если бы наблюдатели звали
+         * filterPosts() напрямую, в сеть ушли бы два одинаковых GET подряд.
+         */
+        scheduleFilterPosts() {
+            clearTimeout(this.timerId);
+            this.timerId = setTimeout(this.filterPosts, 400);
+        },
         filterPosts() {
-            // params вместо ручной сборки строки: axios сам закодирует значения,
-            // а ключи со значением null просто не отправит.
+            // params: this.entries — axios сам развернёт вложенный объект
+            // в filters[title]=…&pagination[page]=2, а PHP разберёт это обратно в массив.
+            // Ключи со значением null он не отправит вовсе.
             axios
-                .get(route('admin.posts.index'), { params: this.filter })
+                .get(route('admin.posts.index'), { params: this.entries })
                 .then((res) => {
-                    // res.data — массив из PostResource::collection()->resolve():
-                    // страница не перерисовывается, меняется только эта переменная.
+                    // res.data — это { data, links, meta }: строка не изменилась
+                    // с 19-го урока, изменилась форма того, что в неё кладётся.
                     this.postsData = res.data;
                 })
                 .catch((e) => {
-                    // 422 — ошибка в значениях фильтра. Список оставляем как есть:
-                    // затирать его пустым массивом при ошибке хуже, чем не делать ничего.
+                    // 422 — ошибка в значениях фильтра или пагинации. Список оставляем
+                    // как есть: затирать его пустым при ошибке хуже, чем не делать ничего.
                     console.log(e.response?.data);
                 });
         },
