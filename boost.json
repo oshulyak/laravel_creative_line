@@ -10,6 +10,10 @@
     "nightwatch": false,
     "sail": false,
     "skills": [
-        "laravel-best-practices"
+        "infer-conventions",
+        "laravel-best-practices",
+        "testing-best-practices",
+        "inertia-vue-development",
+        "tailwindcss-development"
     ]
 }
