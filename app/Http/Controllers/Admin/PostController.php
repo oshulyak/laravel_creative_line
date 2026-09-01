@@ -11,7 +11,8 @@ use App\Http\Resources\Post\PostResource;
 use App\Models\Category;
 use App\Models\Post;
 use App\Services\PostService;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Response;
 
 class PostController extends Controller {
@@ -22,42 +23,101 @@ class PostController extends Controller {
      * при запросе от axios, когда меняются поля фильтра или номер страницы. Отдельный
      * маршрут не нужен — данные те же, отличается только упаковка ответа.
      */
-    public function index(IndexRequest $request): AnonymousResourceCollection|Response {
+    public function index(IndexRequest $request): array|Response {
         $data = $request->validated();
 
-        // filter() — scope из трейта HasFilter: он сам находит PostFilter по имени модели
-        // и применяет только те ключи, которые пришли в validated(). Фильтру достаётся
-        // блок filters: группировка — это про контракт HTTP, сам PostFilter не изменился.
+        // Ключ кэша: одно значение на один различимый набор параметров.
         //
-        // ?? [] обязателен: у контейнера с правилом array и вложенными правилами
-        // validated() возвращает только реально пришедшие вложенные ключи, а сам контейнер
-        // пропускает. Пустая форма — и ключа filters в $data нет (подробности в IndexRequest).
-        // У pagination той же проблемы нет: prepareForValidation() всегда пишет оба
-        // вложенных ключа, поэтому блок в validated() всегда собирается.
+        // serialize() превращает массив в строку без потерь — с типами и вложенностью,
+        // в отличие от implode() или http_build_query(). md5() нужен не для безопасности,
+        // а чтобы получить короткий ключ фиксированной длины: у ключа кэша есть
+        // ограничения (у нас это первичный ключ таблицы cache).
         //
-        // category грузим заранее: без eager loading каждая строка таблицы дала бы
-        // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
-        // Пагинация N+1 не отменяет: пять строк дадут пять лишних запросов вместо тысячи —
-        // меньше, но не «можно».
+        // Порядок ключей в $data влияет на результат, и это безопасно только потому,
+        // что массив приходит из validated(): его порядок задан кодом IndexRequest::rules()
+        // и одинаков для всех запросов. Клади мы в serialize() сырой $request->all(),
+        // порядок диктовал бы клиент, и ?page=2&per_page=5 дал бы не тот ключ,
+        // что ?per_page=5&page=2.
         //
-        // latest('id') теперь обязателен: offset без order by не даёт PostgreSQL никаких
-        // гарантий порядка, и одна запись может приехать сразу на двух страницах.
+        // Префикс posts_index_ обязателен: голый md5(serialize($data)) — ключ без имени,
+        // другой контроллер с той же схемой молча прочитал бы чужое значение.
         //
-        // paginate() идёт последним — он не достраивает запрос, а выполняет его двумя
-        // запросами (count(*) плюс limit/offset) и возвращает LengthAwarePaginator вместо
-        // билдера. Аргументы: записей на странице, колонки, имя query-параметра и номер
-        // страницы. Номер передаём явно, потому что он приезжает в pagination[page],
-        // а встроенный резолвер Laravel читает только плоский ?page=.
-        $posts = Post::query()
-            ->filter($data['filters'] ?? [])
-            ->with('category')
-            ->withCount('likedByProfiles')
-            ->latest('id')
-            ->paginate($data['pagination']['per_page'], ['*'], 'page', $data['pagination']['page']);
+        // Версия из PostService — механизм инвалидации: тегов у драйвера database нет,
+        // поэтому любое сохранение поста увеличивает счётчик, и все ключи со старой
+        // версией просто перестают находиться (протухают они потом сами, по TTL).
+        //
+        // Чего в ключе нет — пользователя. Сейчас админский список одинаков для всех.
+        // Но появится правило «автор видит только свои посты» — и первый зашедший
+        // положит в кэш свою выборку, а второй прочитает её как свою.
+        $cacheKey = 'posts_index_'.PostService::indexVersion().'_'.md5(serialize($data));
 
-        // ->resolve() здесь больше нет: он разворачивает ресурс в голый массив элементов
-        // и выбросил бы meta и links. Обёртка data из помехи стала частью контракта.
-        $posts = PostResource::collection($posts);
+        // remember($key, $ttl, $callback) — это «get или посчитай и положи»: есть значение
+        // по ключу — вернуть его и замыкание не выполнять; нет — выполнить, положить
+        // на указанный срок, вернуть. TTL принимает и число секунд, и момент времени.
+        //
+        // Оборачиваем только поход в базу, а не весь экшен: валидация и ветка wantsJson()
+        // остаются снаружи. Кэшировать нужно дорогую часть.
+        //
+        // В кэш уезжает ГОТОВЫЙ МАССИВ, а не пагинатор. Наивная версия
+        //
+        //     $posts = Cache::remember($cacheKey, now()->addMinutes(120), fn () => Post::query()->…->paginate(…));
+        //
+        // отработала бы ровно один раз. Первый запрос — промах кэша: замыкание вернуло
+        // настоящий LengthAwarePaginator, страница отрисовалась. Второй запрос — попадание,
+        // и он падает с «The script tried to call a method on an incomplete object».
+        // Причина в config/cache.php: в Laravel 13 по умолчанию 'serializable_classes' => false,
+        // то есть unserialize() вызывается с ['allowed_classes' => false] и возвращает
+        // любой объект как __PHP_Incomplete_Class — заглушку без единого метода.
+        // Сделано это против gadget chain: с утёкшим APP_KEY подложенное в кэш значение
+        // позволило бы собрать цепочку вызовов из классов приложения.
+        //
+        // Лечится не белым списком классов (пришлось бы перечислить весь граф —
+        // LengthAwarePaginator, Eloquent\Collection, Post, Category, Carbon, — и любой
+        // новый with() его тихо ломает) и не значением true (это выключить защиту всему
+        // приложению ради одного места), а тем, что в кэш кладутся данные, а не объекты.
+        $posts = Cache::remember($cacheKey, now()->addMinutes(120), function () use ($data): array {
+            // filter() — scope из трейта HasFilter: он сам находит PostFilter по имени модели
+            // и применяет только те ключи, которые пришли в validated(). Фильтру достаётся
+            // блок filters: группировка — это про контракт HTTP, сам PostFilter не изменился.
+            //
+            // ?? [] обязателен: у контейнера с правилом array и вложенными правилами
+            // validated() возвращает только реально пришедшие вложенные ключи, а сам контейнер
+            // пропускает. Пустая форма — и ключа filters в $data нет (подробности в IndexRequest).
+            // У pagination той же проблемы нет: prepareForValidation() всегда пишет оба
+            // вложенных ключа, поэтому блок в validated() всегда собирается.
+            //
+            // category грузим заранее: без eager loading каждая строка таблицы дала бы
+            // отдельный запрос (N+1), а whenLoaded в ресурсе просто не отдал бы связь.
+            // Пагинация N+1 не отменяет: пять строк дадут пять лишних запросов вместо тысячи —
+            // меньше, но не «можно».
+            //
+            // latest('id') обязателен: offset без order by не даёт PostgreSQL никаких
+            // гарантий порядка, и одна запись может приехать сразу на двух страницах.
+            //
+            // paginate() идёт последним — он не достраивает запрос, а выполняет его двумя
+            // запросами (count(*) плюс limit/offset) и возвращает LengthAwarePaginator вместо
+            // билдера. Аргументы: записей на странице, колонки, имя query-параметра и номер
+            // страницы. Номер передаём явно, потому что он приезжает в pagination[page],
+            // а встроенный резолвер Laravel читает только плоский ?page=.
+            //
+            // Весь этот код выполняется лениво: пока значение лежит в кэше, замыкание
+            // не вызывается вообще — Post::query() внутри него просто не строится.
+            $paginator = Post::query()
+                ->filter($data['filters'] ?? [])
+                ->with('category')
+                ->withCount('likedByProfiles')
+                ->latest('id')
+                ->paginate($data['pagination']['per_page'], ['*'], 'page', $data['pagination']['page']);
+
+            // Ресурс разворачиваем внутри замыкания: в кэш уезжает готовый массив
+            // { data, links, meta } — ни одного объекта, ни одной модели, ни одного Carbon.
+            // response()->getData(true) — это тот же ответ, что ушёл бы в браузер,
+            // но разобранный обратно в ассоциативный массив.
+            //
+            // Побочная выгода: на попадании в кэш пропускается не только поход в базу,
+            // но и работа PostResource — раньше он пересобирал массив на каждый запрос.
+            return PostResource::collection($paginator)->response()->getData(true);
+        });
 
         // Запросы различает заголовок Accept: axios просит application/json,
         // Inertia — text/html. Проверку делаем до inertia(), иначе axios получит
@@ -66,9 +126,9 @@ class PostController extends Controller {
         // Именно wantsJson(), а не expectsJson(): второй возвращает true для любого
         // XHR-запроса, а Inertia шлёт X-Requested-With — и страница бы сломалась.
         //
-        // Обе ветки отдают одинаковую структуру { data, links, meta }: JSON-ветка — через
-        // интерфейс Responsable в роутере, Inertia-ветка — потому что у Responsable-пропа
-        // resolvePropertyInstances() зовёт тот же toResponse().
+        // Обе ветки получают одинаковый массив { data, links, meta }: JSON-ветке роутер
+        // сам сделает из него JsonResponse, Inertia положит его пропсом.
+        // Форма ответа не изменилась, Index.vue правок из-за кэша не требует.
         return $request->wantsJson() ? $posts : inertia('Admin/Post/Index', compact('posts'));
     }
 
@@ -159,5 +219,28 @@ class PostController extends Controller {
         $post = PostService::update($post, $request->validated());
 
         return PostResource::make($post)->resolve();
+    }
+
+    /**
+     * Удаление поста.
+     *
+     * Алиас в импорте нужен из-за коллизии: в этом файле Response — это Inertia\Response,
+     * его возвращают страницы. Здесь ответ обычный HTTP-шный.
+     *
+     * Route model binding работает и здесь: несуществующий id даст 404 от контейнера,
+     * до контроллера дело не дойдёт, — проверять if (! $post) не нужно.
+     *
+     * 204 No Content: тела у ответа нет — клиенту нечего показывать, он и так знает,
+     * какой пост удалял. Возвращать удалённую модель обратно — распространённая,
+     * но бессмысленная привычка: этих данных больше не существует.
+     *
+     * Авторизации пока нет: удалить любой пост может любой залогиненный пользователь.
+     * Это дыра, и закрывается она политикой (PostPolicy::delete()), а не проверкой
+     * в контроллере, — но политики идут дальше по курсу.
+     */
+    public function destroy(Post $post): HttpResponse {
+        PostService::destroy($post);
+
+        return response()->noContent();
     }
 }

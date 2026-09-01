@@ -58,6 +58,15 @@ Route::middleware('auth')->group(function () {
     Route::patch('/admin/posts/{post}', [PostController::class, 'update'])
         ->whereNumber('post')
         ->name('admin.posts.update');
+    // DELETE, а не POST: метод запроса и есть описание действия — отдельного слова
+    // в URL не нужно. Подмена метода через _method здесь не требуется: запрос уходит
+    // не из HTML-формы, а из axios, а он умеет любой глагол.
+    //
+    // destroy закрывает ресурсную конвенцию: index, create, store, show, edit, update,
+    // destroy — те же семь маршрутов, что сгенерировал бы Route::resource().
+    Route::delete('/admin/posts/{post}', [PostController::class, 'destroy'])
+        ->whereNumber('post')
+        ->name('admin.posts.destroy');
 });
 
 require __DIR__.'/auth.php';
