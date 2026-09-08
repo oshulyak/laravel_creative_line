@@ -13,38 +13,12 @@
         Вы пока ничего не опубликовали.
     </p>
 
-    <article
-        v-for="post in posts.data"
-        :key="post.id"
-        class="mb-4 rounded-lg bg-white p-5 shadow"
-    >
-        <Link
-            :href="route('client.posts.show', post.id)"
-            class="text-lg font-semibold text-gray-900 hover:text-sky-700"
-        >
-            {{ post.title }}
-        </Link>
-
-        <!--
-            Свои посты на модерации автор видит (контроллер не фильтрует по статусу),
-            и об этом лучше сказать прямо, иначе пост выглядит как обычный.
-
-            Сравнение с числом 1 — шов между сервером и клиентом: константа
-            Post::STATUS_PUBLISHED живёт в PHP, а на клиент приезжает голый код статуса.
-        -->
-        <span
-            v-if="post.status !== 1"
-            class="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
-        >
-            На модерации
-        </span>
-
-        <p class="mt-2 whitespace-pre-line text-sm text-gray-700">
-            {{ excerpt(post.content) }}
-        </p>
-
-        <p class="mt-3 text-sm text-gray-400">♥ {{ post.likes_count }}</p>
-    </article>
+    <!--
+        Та же карточка, что в ленте: бейдж «На модерации» и обрезка текста переехали
+        внутрь компонента. Кнопка удаления появится у всех постов — здесь они свои,
+        и can_delete с сервера придёт истинным.
+    -->
+    <ItemPost v-for="post in posts.data" :key="post.id" :post="post" />
 
     <nav v-if="posts.meta.last_page > 1" class="mt-6 flex flex-wrap gap-1">
         <template v-for="(link, index) in posts.meta.links" :key="index">
@@ -69,13 +43,21 @@
 </template>
 
 <script>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import ClientLayout from '@/Layouts/ClientLayout.vue';
+import ItemPost from '@/Components/Post/ItemPost.vue';
 
 export default {
     name: 'Personal',
     layout: ClientLayout,
-    components: { Head, Link },
+    components: { Head, Link, ItemPost },
+    // Обработчик тот же, что в ленте, и это не случайность: в шапке страницы
+    // выводится posts.meta.total, и после перезапроса он обновится сам.
+    provide() {
+        return {
+            onPostDeleted: this.reloadPosts,
+        };
+    },
     props: {
         profile: {
             type: Object,
@@ -100,8 +82,12 @@ export default {
         },
     },
     methods: {
-        excerpt(content, length = 200) {
-            return content.length > length ? `${content.slice(0, length)}…` : content;
+        /**
+         * only: ['posts'] особенно уместен здесь: профиль в шапке не меняется,
+         * и пересылать его на клиент заново незачем.
+         */
+        reloadPosts() {
+            router.reload({ only: ['posts'] });
         },
     },
 };

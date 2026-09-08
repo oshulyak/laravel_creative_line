@@ -38,4 +38,11 @@ Route::middleware('auth')->group(function () {
     Route::post('posts/{post}/likes', [PostController::class, 'toggleLike'])
         ->whereNumber('post')
         ->name('client.posts.likes.toggle');
+
+    // DELETE, а не POST: глагол уже описывает действие, и админский маршрут
+    // admin.posts.destroy объявлен так же. Адрес совпадает с показом поста —
+    // различает их метод, это и есть REST.
+    Route::delete('posts/{post}', [PostController::class, 'destroy'])
+        ->whereNumber('post')
+        ->name('client.posts.destroy');
 });

@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Post\PostResource;
 use App\Models\Post;
+use App\Services\PostService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Response;
 
 class PostController extends Controller {
@@ -78,5 +80,33 @@ class PostController extends Controller {
             // а не то, что приехало с последней загрузкой страницы.
             'likes_count' => $post->likedByProfiles()->count(),
         ];
+    }
+
+    /**
+     * Удаление своего поста.
+     *
+     * Алиас HttpResponse в импортах нужен из-за коллизии: Response в этом файле —
+     * это Inertia\Response, его возвращает show().
+     *
+     * @see \App\Http\Controllers\Admin\PostController::destroy()
+     */
+    public function destroy(Request $request, Post $post): HttpResponse {
+        // Единственное отличие от админского destroy() — проверка авторства.
+        //
+        // 403, а не 404 как в show(): существование поста уже не тайна, пользователь
+        // видел его в ленте. Скрывать нечего, отказать нужно честно.
+        //
+        // Сравниваем author_id с id ПРОФИЛЯ, а не пользователя: posts.author_id
+        // ссылается на profiles.id. Профиля может не быть — тогда ?-> даст null,
+        // сравнение с author_id (он NOT NULL) будет ложным, и получится тот же 403.
+        abort_unless($post->author_id === $request->user()->profile?->id, 403);
+
+        // Тот же сервис, что и в админке. Он снимает связи, стирает файлы картинок
+        // и двигает версию кэша списка — клиентскому контроллеру не пришлось написать
+        // ни строчки этой логики.
+        PostService::destroy($post);
+
+        // 204 No Content: тела у ответа нет, клиент и так знает, что удалял.
+        return response()->noContent();
     }
 }

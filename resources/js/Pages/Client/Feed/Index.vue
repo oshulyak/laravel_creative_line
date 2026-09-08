@@ -10,44 +10,17 @@
         Публикаций пока нет.
     </p>
 
-    <article
-        v-for="post in posts.data"
-        :key="post.id"
-        class="mb-4 rounded-lg bg-white p-5 shadow"
-    >
-        <!--
-            post.author?.nickname, а не post.author.nickname: ключ приходит из whenLoaded()
-            и при незагруженной связи его в пропсах вообще нет — обращение к свойству
-            у undefined уронит рендер страницы.
-        -->
-        <p class="mb-1 text-xs uppercase tracking-wider text-gray-400">
-            {{ post.author?.nickname ?? 'Аноним' }} ·
-            {{ post.category?.title ?? 'Без категории' }}
-        </p>
+    <!--
+        Вся разметка карточки уехала в ItemPost — вместе с лайком, бейджем статуса
+        и кнопкой удаления. Странице остались заголовок, список и пагинация.
 
-        <!--
-            Link, а не <a href>: обычная ссылка перезагрузила бы страницу целиком,
-            Link делает XHR и подменяет только компонент страницы.
-        -->
-        <Link
-            :href="route('client.posts.show', post.id)"
-            class="text-lg font-semibold text-gray-900 hover:text-sky-700"
-        >
-            {{ post.title }}
-        </Link>
-
-        <p class="mt-2 whitespace-pre-line text-sm text-gray-700">
-            {{ excerpt(post.content) }}
-        </p>
-
-        <!--
-            Лайк в ленте — только индикатор, без клика: ставится он на странице поста.
-            Так лента остаётся страницей чтения, а не набором кнопок, меняющих данные.
-        -->
-        <p class="mt-3 text-sm" :class="post.is_liked ? 'text-rose-600' : 'text-gray-400'">
-            ♥ {{ post.likes_count }}
-        </p>
-    </article>
+        :key обязателен и в списке компонентов: по нему Vue понимает, какая карточка
+        какому посту соответствует. С ключами по id после удаления исчезнет ровно одна
+        карточка, а остальные экземпляры уцелеют вместе со своим состоянием.
+        С :key="index" Vue переиспользовал бы карточки по позиции, и состояние
+        («лайк отправляется») уехало бы к соседнему посту.
+    -->
+    <ItemPost v-for="post in posts.data" :key="post.id" :post="post" />
 
     <!--
         Пагинация ссылками, а не axios: в ленте нет фильтра, поэтому и локального
@@ -85,15 +58,31 @@
 </template>
 
 <script>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import ClientLayout from '@/Layouts/ClientLayout.vue';
+import ItemPost from '@/Components/Post/ItemPost.vue';
 
 export default {
     name: 'Index',
     // layout — свойство Inertia, а не Vue: при SPA-переходе раскладка не пересоздаётся,
     // меняется только содержимое её <slot />.
     layout: ClientLayout,
-    components: { Head, Link },
+    components: { Head, Link, ItemPost },
+    // provide — функцией, а не объектом: только так внутри доступен this.
+    // Выполняется один раз при создании компонента, уже после methods и data,
+    // поэтому ссылка на метод к этому моменту существует.
+    //
+    // Передаём функцию, а не данные: переданное через provide значение
+    // не реактивно, и класть сюда что-то меняющееся было бы ошибкой.
+    //
+    // Пара provide/inject нужна, чтобы событие от кнопки удаления не пришлось
+    // пересылать вручную через каждый промежуточный компонент: DeletePost
+    // излучает deleted, ItemPost его ловит и зовёт обработчик страницы.
+    provide() {
+        return {
+            onPostDeleted: this.reloadPosts,
+        };
+    },
     props: {
         posts: {
             // Object, а не Array: постраничный ответ — это { data, links, meta }.
@@ -105,11 +94,18 @@ export default {
     },
     methods: {
         /**
-         * Короткий анонс поста. Обрезаем на клиенте, потому что на странице поста
-         * нужен полный текст, и второй выборки ради превью делать не хочется.
+         * Реакция ленты на удаление поста: перезапросить список у сервера.
+         *
+         * Выбросить пост из массива на клиенте нельзя: meta.total останется прежним,
+         * кнопок пагинации будет на одну больше, чем нужно, а запись, которая должна
+         * подняться со следующей страницы, на клиент просто не приезжала.
+         *
+         * reload() — это visit() по текущему URL: /feed?page=2 останется /feed?page=2.
+         * only: ['posts'] — частичная перезагрузка: Inertia шлёт заголовок
+         * X-Inertia-Partial-Data, и в ответ попадёт только этот проп.
          */
-        excerpt(content, length = 200) {
-            return content.length > length ? `${content.slice(0, length)}…` : content;
+        reloadPosts() {
+            router.reload({ only: ['posts'] });
         },
     },
 };
