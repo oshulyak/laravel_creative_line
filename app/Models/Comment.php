@@ -29,6 +29,20 @@ class Comment extends Model {
         'published_at',
     ];
 
+    /**
+     * published_at — не строка, а момент времени. Каст превращает его в Carbon
+     * при чтении и обратно при записи, а в JSON он уходит в ISO-8601
+     * (2026-09-08T10:00:00.000000Z) — единственный формат, который одинаково
+     * разбирают все браузеры.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array {
+        return [
+            'published_at' => 'datetime',
+        ];
+    }
+
     public static function getStatuses(): array {
         return [
             self::STATUS_PUBLISHED => 'Опубликовано',

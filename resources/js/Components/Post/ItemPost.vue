@@ -48,36 +48,19 @@
 
         <footer class="mt-3 flex items-center gap-4">
             <!--
-                Кнопка лайка переехала со страницы поста почти без изменений.
-                Заметьте, что isLikePending не мешает соседним карточкам: у каждого
-                экземпляра компонента своё data(). В админском списке ради того же
-                эффекта пришлось держать deletingId и сравнивать его с id строки —
-                компонент снимает эту заботу.
-            -->
-            <button
-                type="button"
-                :disabled="isLikePending"
-                :aria-pressed="postData.is_liked"
-                class="inline-flex items-center gap-2 text-sm disabled:opacity-50"
-                :class="postData.is_liked ? 'text-rose-600' : 'text-gray-400 hover:text-rose-500'"
-                @click="toggleLike"
-            >
-                <svg
-                    class="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    :fill="postData.is_liked ? 'currentColor' : 'none'"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"
-                    />
-                </svg>
+                Кнопка лайка уехала в общий LikeButton: та же логика нужна теперь
+                и комментарию, а третья копия — это уже перебор. Наружу компонент
+                получает готовый URL, а не пост: он не должен знать, что лайкает.
 
-                <span>{{ postData.likes_count }}</span>
-            </button>
+                Своё isLikePending живёт внутри кнопки, поэтому соседние карточки
+                по-прежнему не мешают друг другу — у каждого экземпляра своё data().
+            -->
+            <LikeButton
+                :url="route('client.posts.likes.toggle', postData.id)"
+                :initial-liked="postData.is_liked"
+                :initial-count="postData.likes_count"
+                class="text-sm"
+            />
 
             <!--
                 v-if по флагу с сервера, а не по сравнению id на клиенте:
@@ -101,16 +84,16 @@
 </template>
 
 <script>
-import axios from 'axios';
 import { Link } from '@inertiajs/vue3';
 import DeletePost from '@/Components/Post/DeletePost.vue';
+import LikeButton from '@/Components/LikeButton.vue';
 
 export default {
     name: 'ItemPost',
     // Регистрация локальная, а не глобальная (app.component(...) в app.js):
     // компонент нужен только здесь, и по списку components видно, из чего
     // собран шаблон. Глобально регистрируют то, что встречается почти везде.
-    components: { Link, DeletePost },
+    components: { Link, DeletePost, LikeButton },
     // inject — обработчик, который положила страница через provide().
     // Объектная форма (а не inject: ['onPostDeleted']) нужна ради default:
     // без него Vue напишет в консоль «injection not found» и подставит undefined.
@@ -134,7 +117,6 @@ export default {
             // в проп нельзя — поток данных односторонний. Копия поверхностная,
             // и этого достаточно: меняем только два скалярных поля.
             postData: { ...this.post },
-            isLikePending: false,
         };
     },
     watch: {
@@ -152,24 +134,6 @@ export default {
         },
     },
     methods: {
-        toggleLike() {
-            this.isLikePending = true;
-
-            axios
-                .post(route('client.posts.likes.toggle', this.postData.id))
-                .then((res) => {
-                    // Оба значения берём из ответа, а не считаем на клиенте:
-                    // пост могли лайкнуть другие, пока страница была открыта.
-                    this.postData.is_liked = res.data.is_liked;
-                    this.postData.likes_count = res.data.likes_count;
-                })
-                .catch((e) => {
-                    console.log(e.response?.data);
-                })
-                .finally(() => {
-                    this.isLikePending = false;
-                });
-        },
         /**
          * Реакция на событие от DeletePost.
          *

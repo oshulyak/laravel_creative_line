@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Client\CommentController;
 use App\Http\Controllers\Client\FeedController;
 use App\Http\Controllers\Client\PostController;
 use App\Http\Controllers\Client\ProfileController;
@@ -45,4 +46,26 @@ Route::middleware('auth')->group(function () {
     Route::delete('posts/{post}', [PostController::class, 'destroy'])
         ->whereNumber('post')
         ->name('client.posts.destroy');
+
+    // Список комментариев поста. Отдельный маршрут, а не проп страницы: комментарии
+    // догружаются порциями уже после того, как пост показан, и ходить за ними будет
+    // axios, а не Inertia. Заодно страница поста не меняется вовсе.
+    //
+    // Адрес вложенный — posts/{post}/comments: комментарий не существует сам по себе,
+    // он всегда чей-то. Это стандартная форма вложенного ресурса в REST.
+    Route::get('posts/{post}/comments', [CommentController::class, 'index'])
+        ->whereNumber('post')
+        ->name('client.posts.comments.index');
+
+    // Тот же адрес, другой глагол: GET читает список, POST добавляет в него запись.
+    Route::post('posts/{post}/comments', [CommentController::class, 'store'])
+        ->whereNumber('post')
+        ->name('client.posts.comments.store');
+
+    // Лайк комментария — близнец client.posts.likes.toggle. Адрес НЕ вложен в пост:
+    // у комментария есть собственный id, и знать его родителя, чтобы поставить лайк,
+    // не нужно. Вложенность в URL оправдана там, где без родителя не найти ребёнка.
+    Route::post('comments/{comment}/likes', [CommentController::class, 'toggleLike'])
+        ->whereNumber('comment')
+        ->name('client.comments.likes.toggle');
 });
