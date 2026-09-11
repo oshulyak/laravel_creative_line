@@ -9,7 +9,7 @@
             v-model="content"
             rows="3"
             maxlength="2000"
-            placeholder="Написать комментарий…"
+            :placeholder="placeholder"
             class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500"
             :disabled="isSending"
         />
@@ -41,9 +41,18 @@ import axios from 'axios';
 export default {
     name: 'CommentForm',
     props: {
-        postId: {
-            type: Number,
+        // Готовый адрес, а не postId: форма не должна знать, комментируют через
+        // неё пост или отвечают на комментарий. Тот же приём, что у LikeButton —
+        // собрать URL обязан тот, кто ставит компонент.
+        url: {
+            type: String,
             required: true,
+        },
+        // Единственное, что ещё отличает форму ответа, — подпись в поле.
+        // Значение по умолчанию оставляет поведение списка прежним.
+        placeholder: {
+            type: String,
+            default: 'Написать комментарий…',
         },
     },
     // Компонент сообщает, ЧТО произошло, и не решает, что с этим делать:
@@ -65,9 +74,7 @@ export default {
             this.error = '';
 
             axios
-                .post(route('client.posts.comments.store', this.postId), {
-                    content: this.content,
-                })
+                .post(this.url, { content: this.content })
                 .then((res) => {
                     // Поле чистим только после успеха: при ошибке текст должен
                     // остаться, иначе пользователь потеряет написанное.

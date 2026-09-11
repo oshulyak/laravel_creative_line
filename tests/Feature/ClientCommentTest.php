@@ -112,4 +112,94 @@ class ClientCommentTest extends TestCase {
             ->assertOk()
             ->assertJson(['is_liked' => false, 'likes_count' => 0]);
     }
+
+    public function test_replies_arrive_without_moderated(): void {
+        $post = Post::factory()->create(['status' => Post::STATUS_PUBLISHED]);
+        $comment = Comment::factory()
+            ->for($post, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+
+        // Тот же for(..., 'commentable'), только родитель теперь комментарий.
+        // Ровно этим ответ и отличается от комментария в базе.
+        Comment::factory()
+            ->count(3)
+            ->for($comment, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+
+        Comment::factory()
+            ->for($comment, 'commentable')
+            ->create(['status' => Comment::STATUS_MODERATE]);
+
+        $this->actingAs(Profile::factory()->create()->user)
+            ->getJson(route('client.comments.replies.index', $comment))
+            ->assertOk()
+            ->assertJsonCount(3, 'data');
+    }
+
+    public function test_replies_do_not_leak_into_post_comments(): void {
+        $post = Post::factory()->create(['status' => Post::STATUS_PUBLISHED]);
+        $comment = Comment::factory()
+            ->for($post, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+
+        Comment::factory()
+            ->count(2)
+            ->for($comment, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+
+        $this->actingAs(Profile::factory()->create()->user)
+            ->getJson(route('client.posts.comments.index', $post))
+            ->assertOk()
+            // Самый ценный тест урока: список поста показывает ОДНУ запись,
+            // хотя в таблице их три. Ответы в него не попали — это работа
+            // полиморфной связи, и сломать её легко неаккуратным where().
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.replies_count', 2);
+    }
+
+    public function test_user_replies_to_comment(): void {
+        $post = Post::factory()->create(['status' => Post::STATUS_PUBLISHED]);
+        $comment = Comment::factory()
+            ->for($post, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+        $profile = Profile::factory()->create();
+
+        $this->actingAs($profile->user)
+            ->postJson(route('client.comments.replies.store', $comment), [
+                'content' => 'Согласен',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('content', 'Согласен');
+
+        // Проверяем родителя: и id, и тип. Без commentable_type ответ был бы
+        // неотличим от комментария к посту с тем же номером.
+        $this->assertDatabaseHas('comments', [
+            'commentable_id' => $comment->id,
+            'commentable_type' => Comment::class,
+            'author_id' => $profile->id,
+            'content' => 'Согласен',
+            'status' => Comment::STATUS_PUBLISHED,
+        ]);
+    }
+
+    public function test_reply_to_reply_is_not_allowed(): void {
+        $post = Post::factory()->create(['status' => Post::STATUS_PUBLISHED]);
+        $comment = Comment::factory()
+            ->for($post, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+        $reply = Comment::factory()
+            ->for($comment, 'commentable')
+            ->create(['status' => Comment::STATUS_PUBLISHED]);
+
+        // Кнопки в интерфейсе нет, но запрос отправить ничто не мешает —
+        // и вот это правило проверяет, что «один уровень» живёт на сервере,
+        // а не только в разметке.
+        $this->actingAs(Profile::factory()->create()->user)
+            ->postJson(route('client.comments.replies.store', $reply), [
+                'content' => 'Третий уровень',
+            ])
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('comments', ['content' => 'Третий уровень']);
+    }
 }

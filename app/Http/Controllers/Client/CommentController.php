@@ -10,6 +10,7 @@ use App\Models\Post;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class CommentController extends Controller {
     /**
@@ -33,7 +34,17 @@ class CommentController extends Controller {
             // Ник автора нужен каждой строке списка. Без with() десять комментариев
             // дали бы десять лишних запросов (N+1).
             ->with('author')
-            ->withCount('likedByProfiles')
+            ->withCount([
+                'likedByProfiles',
+                // Псевдоним + условие. Связь называется comments, а клиенту нужен
+                // ключ replies_count — «as replies_count» переименовывает результат.
+                //
+                // Условие обязательно: считать надо ровно то, что потом покажем.
+                // Без него кнопка обещала бы «Показать ответы (3)», а разворачивала
+                // один: ответы на модерации в ветку не попадут.
+                'comments as replies_count' => fn (Builder $query) => $query
+                    ->where('status', Comment::STATUS_PUBLISHED),
+            ])
             // Тот же подзапрос, что у постов: «лайкнул ли ЭТОТ профиль».
             // whereKey(null) при отсутствии профиля даст сравнение с NULL,
             // не истинное ни для одной строки, — все комментарии приедут нелайкнутыми.
@@ -82,6 +93,62 @@ class CommentController extends Controller {
     }
 
     /**
+     * Ответы на комментарий.
+     *
+     * Возвращает ВСЮ ветку целиком, без пагинации, — и это осознанный выбор,
+     * а не забывчивость. Ветку открывают по кнопке, её размер известен заранее
+     * (replies_count уже приехал вместе с комментарием), и в один уровень она
+     * короткая. Бесконечная загрузка внутри бесконечной загрузки усложнила бы
+     * компонент вдвое ради случая, которого в проекте пока нет.
+     *
+     * Порядок обратный списку комментариев: oldest(), а не latest(). Ветка
+     * читается как диалог — сверху реплика, ниже ответы в порядке появления.
+     */
+    public function replies(Request $request, Comment $comment): AnonymousResourceCollection {
+        $this->abortUnlessPostVisible($request, $this->postOfComment($comment));
+
+        $profileId = $request->user()->profile?->id;
+
+        $replies = $comment->comments()
+            ->where('status', Comment::STATUS_PUBLISHED)
+            ->with('author')
+            ->withCount('likedByProfiles')
+            // Лайки в ветке работают так же, как в списке, — значит и подзапрос
+            // «лайкнул ли этот профиль» нужен тот же. Без него все ответы
+            // приедут нелайкнутыми, и сердечко будет «забывать» состояние.
+            ->withExists([
+                'likedByProfiles as is_liked' => fn (Builder $query) => $query->whereKey($profileId),
+            ])
+            ->oldest('id')
+            ->get();
+
+        // Без ->response()->getData(true): meta и links тут взяться неоткуда,
+        // пагинации нет. Клиент получит { "data": [...] } — обёртку data
+        // добавляет сама коллекция ресурса.
+        return CommentResource::collection($replies);
+    }
+
+    /**
+     * Добавление ответа на комментарий.
+     *
+     * Запрос тот же самый, что у комментария к посту: форма присылает один
+     * content, author_id и status подставляет prepareForValidation(). Контракт
+     * формы не зависит от того, кто родитель, — значит и FormRequest один.
+     *
+     * Родителя, как и в store(), проставит связь: $comment->comments()->create()
+     * запишет в commentable_type класс Comment вместо Post.
+     */
+    public function storeReply(StoreRequest $request, Comment $comment): JsonResponse {
+        $this->abortUnlessPostVisible($request, $this->postOfComment($comment));
+
+        $reply = $comment->comments()->create($request->validated());
+
+        $reply->load('author');
+
+        return response()->json(CommentResource::make($reply)->resolve(), 201);
+    }
+
+    /**
      * Переключение лайка на комментарии.
      *
      * Близнец PostController::toggleLike(). Дублирование десяти строк здесь —
@@ -119,5 +186,29 @@ class CommentController extends Controller {
                 || $post->author_id === $request->user()->profile?->id,
             404,
         );
+    }
+
+    /**
+     * Пост, которому принадлежит комментарий, — и одновременно проверка
+     * «это комментарий к посту, а не ответ».
+     *
+     * Оба метода ветки (replies и storeReply) начинаются с него, и оба правила
+     * выполняются здесь разом:
+     *
+     * 1. Один уровень. У ответа commentable — это Comment, instanceof Post ложен,
+     *    и запрос отваливается 404. Ответить на ответ нельзя даже curl-ом.
+     * 2. Видимость. Ветка видна там же, где виден пост: полученный пост уходит
+     *    в тот же abortUnlessPostVisible(), что и в index()/store().
+     *
+     * Почему 404, а не 422: снаружи это выглядит как «такого адреса нет» —
+     * у ответа ветки не существует. 422 сообщал бы, что адрес правильный,
+     * а данные плохие, но данные тут ни при чём.
+     */
+    private function postOfComment(Comment $comment): Post {
+        $post = $comment->commentable;
+
+        abort_unless($post instanceof Post, 404);
+
+        return $post;
     }
 }

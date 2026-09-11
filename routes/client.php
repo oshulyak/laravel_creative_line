@@ -68,4 +68,20 @@ Route::middleware('auth')->group(function () {
     Route::post('comments/{comment}/likes', [CommentController::class, 'toggleLike'])
         ->whereNumber('comment')
         ->name('client.comments.likes.toggle');
+
+    // Ответы на комментарий. Адрес вложен в комментарий, а не в пост: ветка
+    // принадлежит конкретному комментарию, и id поста для неё избыточен.
+    //
+    // Последний сегмент — replies, хотя модель та же самая Comment. В URL мы
+    // называем РОЛЬ, а не класс: comments/5/comments читалось бы как опечатка,
+    // а comments/5/replies сразу говорит, что лежит по адресу.
+    Route::get('comments/{comment}/replies', [CommentController::class, 'replies'])
+        ->whereNumber('comment')
+        ->name('client.comments.replies.index');
+
+    // Тот же адрес, POST — добавить ответ в ветку. Полная симметрия с парой
+    // client.posts.comments.index / .store: GET читает список, POST дописывает.
+    Route::post('comments/{comment}/replies', [CommentController::class, 'storeReply'])
+        ->whereNumber('comment')
+        ->name('client.comments.replies.store');
 });

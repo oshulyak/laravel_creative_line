@@ -4,7 +4,10 @@
             Комментарии <span class="text-gray-400">{{ total }}</span>
         </h2>
 
-        <CommentForm :post-id="postId" @created="handleCreated" />
+        <CommentForm
+            :url="route('client.posts.comments.store', postId)"
+            @created="handleCreated"
+        />
 
         <ItemComment
             v-for="comment in comments"

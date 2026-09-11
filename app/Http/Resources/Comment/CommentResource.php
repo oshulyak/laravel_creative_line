@@ -28,6 +28,12 @@ class CommentResource extends JsonResource {
             // Форма ответа для лайкаемой сущности получается одинаковой, и клиентская
             // кнопка лайка сможет работать и с постом, и с комментарием.
             'likes_count' => $this->whenCounted('likedByProfiles'),
+            // whenCounted('replies') ищет атрибут replies_count — то есть имя
+            // берётся из ПСЕВДОНИМА запроса (comments as replies_count), а не из
+            // имени связи. Ключ условный: там, где withCount() не звали (например,
+            // в ответе на создание комментария), его в JSON просто не будет,
+            // и клиент подставит 0.
+            'replies_count' => $this->whenCounted('replies'),
             'is_liked' => $this->whenHas('is_liked', fn (mixed $value): bool => (bool) $value),
             'author' => $this->whenLoaded(
                 'author',
