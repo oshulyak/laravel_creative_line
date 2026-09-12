@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Client\Repost\StoreRequest;
 use App\Http\Resources\Post\PostResource;
 use App\Models\Post;
 use App\Services\PostService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Inertia\Response;
@@ -36,8 +38,12 @@ class PostController extends Controller {
         // модели: запрос строил контейнер, достроить его мы не можем, поэтому догружаем
         // отдельными запросами. Без них PostResource промолчит про связи и про лайки —
         // whenLoaded/whenCounted/whenHas просто не найдут данных.
-        $post->load(['author', 'category', 'images', 'tags']);
-        $post->loadCount('likedByProfiles');
+        //
+        // parent.author — точечная запись для вложенной связи: «загрузи родителя,
+        // а у родителя — автора». Без неё в строке «Репост: …» не будет ника автора
+        // оригинала. У обычного поста связь просто вернёт null.
+        $post->load(['author', 'category', 'images', 'tags', 'parent.author']);
+        $post->loadCount(['likedByProfiles', 'reposts']);
         $post->loadExists([
             'likedByProfiles as is_liked' => fn (Builder $query) => $query->whereKey($profileId),
         ]);
@@ -80,6 +86,37 @@ class PostController extends Controller {
             // а не то, что приехало с последней загрузкой страницы.
             'likes_count' => $post->likedByProfiles()->count(),
         ];
+    }
+
+    /**
+     * Репост публикации.
+     *
+     * Репостить можно только опубликованное. Свой пост на модерации автор открыть
+     * может (см. show()), но репост из него сделал бы черновик публичным в обход
+     * модерации — поэтому проверяем именно статус, без поблажки автору.
+     *
+     * 404, а не 403: наружу это выглядит как «репостить нечего».
+     *
+     * Репост репоста не запрещаем: у каждого репоста свой автор и свой заголовок,
+     * а parent_id указывает на непосредственный источник — цепочка ничего не ломает.
+     */
+    public function storeRepost(StoreRequest $request, Post $post): JsonResponse {
+        abort_unless($post->status === Post::STATUS_PUBLISHED, 404);
+
+        // parent_id проставит сама связь: она знает id родителя. Дублировать это
+        // в FormRequest значило бы завести второй источник правды.
+        $post->reposts()->create($request->validated());
+
+        // Возвращаем не созданный пост, а состояние оригинала: карточка репоста
+        // на этой странице не появляется — он уедет в «Мои публикации», — а вот
+        // счётчик под иконкой обновить нужно. Тот же формат, что у toggleLike():
+        // маленький массив вместо ресурса.
+        //
+        // Считаем запросом в базу, а не ++ на клиенте: пока страница была открыта,
+        // репостнуть мог кто-то ещё.
+        return response()->json([
+            'reposts_count' => $post->reposts()->count(),
+        ], 201);
     }
 
     /**

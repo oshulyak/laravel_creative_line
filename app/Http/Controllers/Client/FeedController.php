@@ -30,10 +30,15 @@ class FeedController extends Controller {
             ->where('status', Post::STATUS_PUBLISHED)
             // author и category грузим заранее — иначе на десять карточек ленты
             // получим двадцать лишних запросов (N+1).
-            ->with(['author', 'category'])
-            // Счётчик лайков одним подзапросом. Атрибут приедет как liked_by_profiles_count,
-            // наружу PostResource отдаст его как likes_count.
-            ->withCount('likedByProfiles')
+            //
+            // parent.author — вложенная связь: «загрузи родителя, а у родителя —
+            // автора». Это два запроса на весь список, а не на каждую карточку;
+            // у обычных постов parent вернётся null.
+            ->with(['author', 'category', 'parent.author'])
+            // Счётчики одним подзапросом на каждый. Атрибуты приедут как
+            // liked_by_profiles_count и reposts_count, наружу PostResource отдаст
+            // их как likes_count и reposts_count.
+            ->withCount(['likedByProfiles', 'reposts'])
             // withExists — брат withCount: тот считает связанные записи, этот отвечает,
             // есть ли хоть одна. Замыкание сужает подзапрос до текущего профиля, иначе
             // вопрос звучал бы как «лайкнул ли пост хоть кто-нибудь».

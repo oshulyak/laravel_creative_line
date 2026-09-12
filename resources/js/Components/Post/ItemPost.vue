@@ -42,9 +42,51 @@
             На модерации
         </span>
 
-        <p class="mt-2 whitespace-pre-line text-sm text-gray-700">
-            {{ excerpt(postData.content) }}
-        </p>
+        <!--
+            Тело карточки. У обычного поста это просто абзац с текстом; у репоста
+            тот же абзац получает сдвиг вправо, вертикальную линию слева и мягкую
+            подложку — сразу видно, что текст пришёл с чужой публикации.
+
+            Обёртка нужна, чтобы линия и фон охватили и подпись, и текст одним
+            блоком: два отдельных элемента со своими рамками разошлись бы
+            на отступе между ними.
+
+            Статический class остаётся статическим, а :class добавляет к нему
+            оформление вложенности — Vue объединяет оба атрибута, а не заменяет
+            один другим.
+        -->
+        <div
+            class="mt-2"
+            :class="
+                postData.parent
+                    ? 'rounded-r-lg border-l-4 border-sky-200 bg-sky-50/60 py-2 pl-4 pr-3'
+                    : ''
+            "
+        >
+            <!--
+                Строка появляется только у репостов: у обычного поста ключа parent
+                в JSON нет вовсе (whenLoaded), и v-if не выполнится.
+
+                Второй случай, который гасит тот же v-if, — удалённый оригинал: тогда
+                parent приедет как null (в базе сработал nullOnDelete). Репост остаётся
+                обычным постом, и подписывать его нечем — вместе с подписью пропадёт
+                и рамка с подложкой: :class смотрит на то же самое поле.
+            -->
+            <p v-if="postData.parent" class="mb-1 text-xs text-gray-500">
+                Репост:
+                <Link
+                    :href="route('client.posts.show', postData.parent.id)"
+                    class="text-sky-700 hover:underline"
+                >
+                    {{ postData.parent.title }}
+                </Link>
+                · {{ postData.parent.author?.nickname ?? 'Аноним' }}
+            </p>
+
+            <p class="whitespace-pre-line text-sm text-gray-700">
+                {{ excerpt(postData.content) }}
+            </p>
+        </div>
 
         <footer class="mt-3 flex items-center gap-4">
             <!--
@@ -60,6 +102,17 @@
                 :initial-liked="postData.is_liked"
                 :initial-count="postData.likes_count"
                 class="text-sm"
+            />
+
+            <!--
+                Кнопка репоста: иконка со счётчиком, модалка живёт внутри неё.
+                Компонент получает пост целиком, а не готовый url, — ему нужен
+                заголовок оригинала для окна.
+            -->
+            <RepostButton
+                :post="postData"
+                :initial-count="postData.reposts_count"
+                @reposted="handleReposted"
             />
 
             <!--
@@ -87,13 +140,14 @@
 import { Link } from '@inertiajs/vue3';
 import DeletePost from '@/Components/Post/DeletePost.vue';
 import LikeButton from '@/Components/LikeButton.vue';
+import RepostButton from '@/Components/Post/RepostButton.vue';
 
 export default {
     name: 'ItemPost',
     // Регистрация локальная, а не глобальная (app.component(...) в app.js):
     // компонент нужен только здесь, и по списку components видно, из чего
     // собран шаблон. Глобально регистрируют то, что встречается почти везде.
-    components: { Link, DeletePost, LikeButton },
+    components: { Link, DeletePost, LikeButton, RepostButton },
     // inject — обработчик, который положила страница через provide().
     // Объектная форма (а не inject: ['onPostDeleted']) нужна ради default:
     // без него Vue напишет в консоль «injection not found» и подставит undefined.
@@ -101,6 +155,7 @@ export default {
     // ничего не предоставила.
     inject: {
         onPostDeleted: { default: null },
+        onPostReposted: { default: null },
     },
     props: {
         // Контракт компонента: он ждёт объект поста в том виде, в каком его отдаёт
@@ -145,6 +200,16 @@ export default {
          */
         handleDeleted(postId) {
             this.onPostDeleted?.(postId);
+        },
+        /**
+         * Реакция на событие от RepostButton.
+         *
+         * Карточка снова не решает, что делать, — передаёт факт странице. Тот же
+         * приём, что с удалением: на «Моих публикациях» список нужно перезапросить,
+         * чтобы свежий репост появился сразу, а не после F5.
+         */
+        handleReposted() {
+            this.onPostReposted?.();
         },
         /**
          * Короткий анонс поста. Обрезаем на клиенте, потому что на странице поста

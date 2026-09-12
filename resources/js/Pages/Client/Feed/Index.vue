@@ -81,6 +81,9 @@ export default {
     provide() {
         return {
             onPostDeleted: this.reloadPosts,
+            // Обработчик тот же самый: и удаление, и репост меняют состав списка
+            // и meta.total. Второй метод писать не нужно.
+            onPostReposted: this.reloadPosts,
         };
     },
     props: {

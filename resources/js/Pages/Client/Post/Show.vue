@@ -11,6 +11,17 @@
     <article class="rounded-lg bg-white p-6 shadow">
         <h1 class="mb-2 text-2xl font-semibold text-gray-900">{{ post.title }}</h1>
 
+        <!-- Только у репостов: у обычного поста ключа parent в пропсах нет. -->
+        <p v-if="post.parent" class="mb-2 text-sm text-gray-500">
+            Репост:
+            <Link
+                :href="route('client.posts.show', post.parent.id)"
+                class="text-sky-700 hover:underline"
+            >
+                {{ post.parent.title }}
+            </Link>
+        </p>
+
         <p class="mb-4 text-sm text-gray-500">
             {{ post.author?.nickname ?? 'Аноним' }} ·
             {{ post.category?.title ?? 'Без категории' }}
@@ -48,13 +59,25 @@
             перенесёт его на корневой <button> и ДОБАВИТ к объявленным внутри
             классам, а не заменит их.
         -->
-        <LikeButton
-            :url="route('client.posts.likes.toggle', post.id)"
-            :initial-liked="post.is_liked"
-            :initial-count="post.likes_count"
-            icon-class="h-6 w-6"
-            class="mt-6 text-sm"
-        />
+        <!--
+            Кнопок стало две, поэтому отступ и выравнивание переехали на общую
+            обёртку: раньше mt-6 висел прямо на LikeButton как fallthrough-атрибут.
+        -->
+        <div class="mt-6 flex items-center gap-4">
+            <LikeButton
+                :url="route('client.posts.likes.toggle', post.id)"
+                :initial-liked="post.is_liked"
+                :initial-count="post.likes_count"
+                icon-class="h-6 w-6"
+                class="text-sm"
+            />
+
+            <!--
+                Обработчика @reposted здесь нет: перезапрашивать нечего, страница
+                показывает оригинал, а счётчик кнопка обновит сама из ответа.
+            -->
+            <RepostButton :post="post" :initial-count="post.reposts_count" />
+        </div>
     </article>
 
     <!--
@@ -68,12 +91,13 @@
 import { Head, Link } from '@inertiajs/vue3';
 import ClientLayout from '@/Layouts/ClientLayout.vue';
 import LikeButton from '@/Components/LikeButton.vue';
+import RepostButton from '@/Components/Post/RepostButton.vue';
 import CommentList from '@/Components/Comment/CommentList.vue';
 
 export default {
     name: 'Show',
     layout: ClientLayout,
-    components: { Head, Link, LikeButton, CommentList },
+    components: { Head, Link, LikeButton, RepostButton, CommentList },
     props: {
         // required: true, а не default: страница без поста не имеет смысла.
         post: {

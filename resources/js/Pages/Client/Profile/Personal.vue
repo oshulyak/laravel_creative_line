@@ -56,6 +56,10 @@ export default {
     provide() {
         return {
             onPostDeleted: this.reloadPosts,
+            // Именно здесь выполняется последний пункт задания: репост — пост
+            // с author_id текущего профиля, personal() выбирает $profile->posts(),
+            // и после перезапроса он встаёт первым среди обычных постов.
+            onPostReposted: this.reloadPosts,
         };
     },
     props: {

@@ -40,6 +40,19 @@ Route::middleware('auth')->group(function () {
         ->whereNumber('post')
         ->name('client.posts.likes.toggle');
 
+    // Репост публикации. Адрес вложен в оригинал: репост не бывает сам по себе,
+    // он всегда «репост чего-то» — та же форма, что у posts/{post}/comments.
+    //
+    // Последний сегмент — reposts, хотя модель та же самая Post. В URL называем
+    // РОЛЬ, а не класс: posts/5/posts читалось бы как опечатка. Ровно тот же приём,
+    // что с replies у ответов на комментарии.
+    //
+    // Только store: списка репостов и их удаления в задании нет. Маршруты заводим
+    // под то, что реально нужно, а не «на вырост».
+    Route::post('posts/{post}/reposts', [PostController::class, 'storeRepost'])
+        ->whereNumber('post')
+        ->name('client.posts.reposts.store');
+
     // DELETE, а не POST: глагол уже описывает действие, и админский маршрут
     // admin.posts.destroy объявлен так же. Адрес совпадает с показом поста —
     // различает их метод, это и есть REST.

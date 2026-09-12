@@ -8,6 +8,7 @@ use Database\Factories\PostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
@@ -26,6 +27,11 @@ class Post extends Model {
      */
     protected $fillable = [
         'author_id',
+        // Клиент этот ключ не присылает — его подставляет связь reposts()->create().
+        // Но кладёт она его через массовое присвоение, и без записи здесь значение
+        // будет отброшено молча: колонка nullable, ошибки не случится, а в базе
+        // окажется обычный пост без родителя.
+        'parent_id',
         'category_id',
         'title',
         'content',
@@ -53,6 +59,28 @@ class Post extends Model {
      */
     public function category(): BelongsTo {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Оригинал, с которого сделан репост (posts.parent_id → posts.id).
+     *
+     * Имя колонки указываем вторым аргументом: по имени модели Post Eloquent
+     * ждал бы post_id. У обычного поста связь вернёт null — колонка nullable,
+     * значит и связь nullable.
+     */
+    public function parent(): BelongsTo {
+        return $this->belongsTo(Post::class, 'parent_id');
+    }
+
+    /**
+     * Репосты этой публикации.
+     *
+     * hasMany, а не morphMany: у репоста родитель всегда пост, тип хранить негде
+     * и незачем. Пара parent()/reposts() — две стороны одной колонки: belongsTo
+     * смотрит «вверх», hasMany — «вниз».
+     */
+    public function reposts(): HasMany {
+        return $this->hasMany(Post::class, 'parent_id');
     }
 
     /**
