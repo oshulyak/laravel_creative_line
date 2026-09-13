@@ -40,6 +40,22 @@ class Post extends Model {
         'published_at',
     ];
 
+    /**
+     * published_at — не строка, а момент времени. Каст превращает его в Carbon
+     * при чтении и обратно при записи, а в JSON он уходит в ISO-8601 —
+     * ровно так же, как это давно сделано у Comment.
+     *
+     * views_count в $fillable нет и не нужно: счётчик никто не присылает формой,
+     * его только увеличивает increment() при открытии страницы поста.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array {
+        return [
+            'published_at' => 'datetime',
+        ];
+    }
+
     public static function getStatuses(): array {
         return [
             self::STATUS_PUBLISHED => 'Опубликовано',

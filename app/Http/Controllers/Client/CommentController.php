@@ -5,14 +5,13 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Client\Comment\StoreRequest;
 use App\Http\Resources\Comment\CommentResource;
-use App\Mail\Comment\StoreCommentMail;
+use App\Jobs\SendCommentMailJob;
 use App\Models\Comment;
 use App\Models\Post;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\Mail;
 
 class CommentController extends Controller {
     /**
@@ -86,26 +85,23 @@ class CommentController extends Controller {
         // по умолчанию у пропсов LikeButton — 0 и false. Два запроса в базу
         // ради заранее известного ответа делать незачем.
 
-        // Уведомление автору публикации.
+        // Уведомление автору публикации — через очередь.
         //
-        // Условие — «комментатор и автор не один человек»: писать себе о собственном
-        // комментарии незачем, а на странице поста автор комментирует свой пост чаще
-        // всех остальных вместе взятых.
+        // Было: Mail::to($post->author->user)->send(new StoreCommentMail($post, $comment));
         //
-        // Mail::to() ждёт объект с полями email и name — это User, а не Profile:
-        // почта лежит в users, у профиля её нет вовсе. Отсюда цепочка author->user.
+        // dispatch() не отправляет письмо, а записывает задачу в таблицу jobs
+        // и сразу возвращает управление: ответ уходит клиенту, не дожидаясь SMTP.
+        // Письмо отправит воркер (queue:listen в composer run dev) отдельным процессом.
         //
-        // send() — отправка прямо здесь и сейчас: строка вернёт управление только
-        // после того, как SMTP-сервер примет письмо. Пока ждём его, ждёт и пользователь,
-        // а упавший SMTP уронит запрос уже ПОСЛЕ записи комментария в базу.
-        // Это осознанный промежуточный шаг: в 29-м уроке отправка уедет в очередь.
+        // Условие «не пишем автору о его же комментарии» остаётся здесь, а не переезжает
+        // внутрь задачи: это правило про то, НУЖНО ЛИ уведомление, и решать его
+        // дешевле до записи в очередь, чем создавать задачу ради ничего.
         //
         // Почему прямо в контроллере, а не в событии со слушателем: следствие у действия
         // пока одно. Событие CommentCreated окупится, когда их станет два-три.
-
-        // if ($post->author_id !== $comment->author_id) {
-        Mail::to($post->author->user)->send(new StoreCommentMail($post, $comment));
-        // }
+        if ($post->author_id !== $comment->author_id) {
+            SendCommentMailJob::dispatch($post, $comment);
+        }
 
         // 201 Created — правильный код для «создал новую запись». Тело — сам
         // комментарий: клиенту нужно вставить его в список, и второй запрос
