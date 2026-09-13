@@ -16,9 +16,25 @@ Route::middleware('auth')->group(function () {
 
     // Страница «мои публикации». Слово personal — не id профиля, а фиксированный сегмент:
     // чей профиль показывать, сервер знает из сессии, а не из URL. Чужие профили
-    // приедут отдельным маршрутом profiles/{profile} позже.
+    // открываются маршрутом profiles/{profile} ниже.
     Route::get('profiles/personal', [ProfileController::class, 'personal'])
         ->name('client.profiles.personal');
+
+    // Страница чужого профиля. Порядок объявления относительно profiles/personal
+    // роли не играет: whereNumber() ограничивает сегмент цифрами, и слово personal
+    // под этот маршрут не подойдёт никогда.
+    Route::get('profiles/{profile}', [ProfileController::class, 'show'])
+        ->whereNumber('profile')
+        ->name('client.profiles.show');
+
+    // Переключение подписки. Форма ровно та же, что у лайка: POST на «подписчиков»
+    // профиля, а глагол toggle живёт в имени маршрута, а не в адресе.
+    //
+    // Один toggle вместо пары store/destroy — по той же причине, что у лайков:
+    // клиент не знает наверняка, подписан ли он прямо сейчас, решает сервер.
+    Route::post('profiles/{profile}/subscribers', [ProfileController::class, 'toggleSubscribe'])
+        ->whereNumber('profile')
+        ->name('client.profiles.subscribers.toggle');
 
     // whereNumber — та же защита, что в админке: сегмент ограничен регуляркой [0-9]+,
     // и маршрут перестаёт зависеть от порядка объявления.

@@ -7,6 +7,7 @@ use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
@@ -77,6 +78,48 @@ class Profile extends Model {
      */
     public function likedImages(): MorphToMany {
         return $this->morphedByMany(Image::class, 'likeable')->withTimestamps();
+    }
+
+    /**
+     * Профили, подписанные на этот профиль («мои подписчики»).
+     *
+     * Самоссылающаяся связь многие-ко-многим: обе стороны — profiles. Угадать
+     * Laravel тут не может ничего, поэтому все четыре аргумента указаны явно:
+     *
+     * 1. related — какую модель достаём (Profile);
+     * 2. table — промежуточная таблица;
+     * 3. foreignPivotKey — колонка, в которой лежит id ТЕКУЩЕГО профиля;
+     * 4. relatedPivotKey — колонка, в которой лежит id того, кого достаём.
+     *
+     * Здесь текущий профиль — тот, НА КОГО подписаны, значит его id лежит
+     * в subscribing_id, а достаём мы подписчиков из subscriber_id.
+     */
+    public function subscribers(): BelongsToMany {
+        return $this->belongsToMany(
+            Profile::class,
+            'profile_subscriptions',
+            'subscribing_id',
+            'subscriber_id',
+        )->withTimestamps();
+    }
+
+    /**
+     * Профили, на которые подписан этот профиль («мои подписки»).
+     *
+     * Та же таблица, те же две колонки — поменялись местами. Пара
+     * subscribers()/subscriptions() — две стороны одной связи.
+     *
+     * withTimestamps() нужен, чтобы attach()/toggle() заполняли created_at
+     * и updated_at: по умолчанию Eloquent промежуточные даты не трогает.
+     * Точно так же настроены likedPosts() и likedComments().
+     */
+    public function subscriptions(): BelongsToMany {
+        return $this->belongsToMany(
+            Profile::class,
+            'profile_subscriptions',
+            'subscriber_id',
+            'subscribing_id',
+        )->withTimestamps();
     }
 
     /**

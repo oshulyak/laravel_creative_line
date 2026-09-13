@@ -7,13 +7,23 @@
     -->
     <article class="mb-4 rounded-lg bg-white p-5 shadow">
         <!--
-            postData.author?.nickname, а не postData.author.nickname: ключ приходит
-            из whenLoaded() и при незагруженной связи его в пропсах вообще нет —
-            обращение к свойству у undefined уронит рендер страницы.
+            Ник автора — ссылка на страницу его профиля.
+
+            v-if по самому объекту author, а не постфикс ?.: ключ приходит
+            из whenLoaded() и при незагруженной связи его в пропсах вообще нет.
+            Ссылке нужен ещё и author.id, а построить маршрут с undefined
+            route() не сможет — Ziggy бросит ошибку и уронит рендер.
         -->
         <p class="mb-1 text-xs uppercase tracking-wider text-gray-400">
-            {{ postData.author?.nickname ?? 'Аноним' }} ·
-            {{ postData.category?.title ?? 'Без категории' }}
+            <Link
+                v-if="postData.author"
+                :href="route('client.profiles.show', postData.author.id)"
+                class="hover:text-sky-700"
+            >
+                {{ postData.author.nickname }}
+            </Link>
+            <span v-else>Аноним</span>
+            · {{ postData.category?.title ?? 'Без категории' }}
         </p>
 
         <!--
