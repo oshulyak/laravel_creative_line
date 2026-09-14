@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Notification\NotificationResource;
 use App\Http\Resources\Post\PostResource;
 use App\Http\Resources\Profile\ProfileResource;
+use App\Models\Chat;
 use App\Models\Post;
 use App\Models\Profile;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Response;
 
 class ProfileController extends Controller {
@@ -130,6 +133,54 @@ class ProfileController extends Controller {
         return [
             'is_subscribed' => $changes['attached'] !== [],
         ];
+    }
+
+    /**
+     * Кнопка «Написать»: открыть чат с этим профилем.
+     *
+     * Чат уже есть — ведём в него, нет — создаём и ведём в новый. Кнопка одна
+     * на оба случая: был ли у пользователя диалог с этим человеком, решает
+     * сервер, а не интерфейс.
+     *
+     * Возвращает редирект, а не массив: запрос отправляет Inertia-ссылка,
+     * и по редиректу она сама откроет страницу чата.
+     */
+    public function storeChat(Request $request, Profile $profile): RedirectResponse {
+        $viewer = $request->user()->profile;
+
+        // Те же две проверки, что в toggleSubscribe(): без профиля участвовать
+        // в чате некому, а чат с самим собой не нужен. Скрытая кнопка
+        // от POST-запроса руками не защищает.
+        abort_if($viewer === null, 403, 'У пользователя нет профиля.');
+        abort_if($viewer->id === $profile->id, 403, 'Нельзя написать самому себе.');
+
+        // «Среди МОИХ чатов — тот, в котором участвует ОН».
+        // chats() сужает выборку до чатов смотрящего, whereHas() оставляет
+        // только те, где среди участников есть второй профиль.
+        //
+        // Не firstOrCreate(): он ищет по колонкам одной таблицы, а условие
+        // «чат, где участвуют эти двое» лежит в chat_profile.
+        $chat = $viewer->chats()
+            ->whereHas('profiles', fn (Builder $query) => $query->whereKey($profile->id))
+            ->first();
+
+        if ($chat === null) {
+            // Чат и его участники — вставки в две разные таблицы. Если вторая
+            // упадёт, без транзакции в базе останется чат без участников:
+            // его не найдёт ни поиск выше, ни страница чата. Транзакция
+            // откатит обе вставки разом — как в PostService.
+            $chat = DB::transaction(function () use ($viewer, $profile): Chat {
+                $chat = Chat::create();
+
+                // attach() с массивом id — один INSERT на обе строки chat_profile.
+                $chat->profiles()->attach([$viewer->id, $profile->id]);
+
+                return $chat;
+            });
+        }
+
+        // В route() передаём модель, а не $chat->id: Laravel сам возьмёт ключ.
+        return redirect()->route('client.chats.show', $chat);
     }
 
     /**

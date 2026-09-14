@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Client\ChatController;
 use App\Http\Controllers\Client\CommentController;
 use App\Http\Controllers\Client\FeedController;
 use App\Http\Controllers\Client\PostController;
@@ -44,6 +45,23 @@ Route::middleware('auth')->group(function () {
     Route::post('profiles/{profile}/subscribers', [ProfileController::class, 'toggleSubscribe'])
         ->whereNumber('profile')
         ->name('client.profiles.subscribers.toggle');
+
+    // Кнопка «Написать» на странице профиля. Адрес читается как «чаты с этим
+    // профилем», POST — «открой мне такой».
+    //
+    // Имя store, хотя чат создаётся не всегда: если он уже есть, сервер просто
+    // перенаправит в него. Клиенту это знать не нужно — решает сервер,
+    // как и у переключения подписки.
+    Route::post('profiles/{profile}/chats', [ProfileController::class, 'storeChat'])
+        ->whereNumber('profile')
+        ->name('client.profiles.chats.store');
+
+    // Страница чата. Адрес НЕ вложен в профиль: у чата свой id и несколько
+    // участников, «чей» это чат, из адреса не скажешь. Тот же довод,
+    // что у comments/{comment}/likes.
+    Route::get('chats/{chat}', [ChatController::class, 'show'])
+        ->whereNumber('chat')
+        ->name('client.chats.show');
 
     // whereNumber — та же защита, что в админке: сегмент ограничен регуляркой [0-9]+,
     // и маршрут перестаёт зависеть от порядка объявления.

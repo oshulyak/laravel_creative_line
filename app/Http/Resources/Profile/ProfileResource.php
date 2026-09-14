@@ -38,6 +38,13 @@ class ProfileResource extends JsonResource {
             // у поста. И так же, как can_delete, — подсказка интерфейсу, а не защита:
             // настоящая проверка стоит в toggleSubscribe().
             'can_subscribe' => $this->id !== $request->user()?->profile?->id,
+            // Показывать ли кнопку «Написать»: писать самому себе нельзя.
+            //
+            // Правило пока совпадает с can_subscribe, но флаги отдельные: кнопки
+            // разные, и шаблон, где «Написать» спрятана под can_subscribe, читался
+            // бы как ошибка. Как и can_subscribe, это подсказка интерфейсу, а не
+            // защита: настоящая проверка стоит в storeChat().
+            'can_message' => $this->id !== $request->user()?->profile?->id,
         ];
     }
 }

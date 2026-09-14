@@ -11,26 +11,52 @@
         </div>
 
         <!--
-            v-if по флагу с сервера, а не по сравнению id на клиенте: на собственной
-            странице кнопки нет вовсе. Тот же приём, что с can_delete у карточки.
-
-            <button>, а не <a href="#" @click.prevent>: это действие, а не переход.
-            Кнопка сама получает фокус с клавиатуры и умеет disabled.
+            Обёртка появилась, потому что кнопок стало две: shrink-0 переехал
+            с кнопки подписки на неё.
         -->
-        <button
-            v-if="profile.can_subscribe"
-            type="button"
-            :disabled="isSending"
-            class="shrink-0 rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
-            :class="
-                isSubscribed
-                    ? 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                    : 'border-sky-700 bg-sky-700 text-white hover:bg-sky-800'
-            "
-            @click="toggleSubscribe"
-        >
-            {{ isSubscribed ? 'Отписаться' : 'Подписаться' }}
-        </button>
+        <div class="flex shrink-0 gap-2">
+            <!--
+                Link, а не axios, как у подписки: после нажатия нужно оказаться
+                на странице чата. Inertia отправит POST, получит от сервера
+                редирект и сама откроет страницу, на которую он ведёт.
+
+                method="post" — маршрут принимает только POST; без атрибута
+                ссылка ушла бы GET-запросом и получила 405.
+                as="button" — действие, а не переход по адресу: <a> с POST
+                нельзя открыть в новой вкладке, и Inertia просит рисовать <button>.
+            -->
+            <Link
+                v-if="profile.can_message"
+                :href="route('client.profiles.chats.store', profile.id)"
+                method="post"
+                as="button"
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+                Написать
+            </Link>
+
+            <!--
+                v-if по флагу с сервера, а не по сравнению id на клиенте: на собственной
+                странице кнопки нет вовсе. Тот же приём, что с can_delete у карточки.
+
+                <button>, а не <a href="#" @click.prevent>: это действие, а не переход.
+                Кнопка сама получает фокус с клавиатуры и умеет disabled.
+            -->
+            <button
+                v-if="profile.can_subscribe"
+                type="button"
+                :disabled="isSending"
+                class="rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
+                :class="
+                    isSubscribed
+                        ? 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        : 'border-sky-700 bg-sky-700 text-white hover:bg-sky-800'
+                "
+                @click="toggleSubscribe"
+            >
+                {{ isSubscribed ? 'Отписаться' : 'Подписаться' }}
+            </button>
+        </div>
     </section>
 
     <p v-if="!posts.data.length" class="rounded-lg bg-white p-6 text-sm text-gray-500">

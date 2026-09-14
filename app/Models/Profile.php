@@ -134,6 +134,19 @@ class Profile extends Model {
     }
 
     /**
+     * Чаты, в которых участвует профиль (многие ко многим через chat_profile).
+     *
+     * Обратная сторона Chat::profiles(): та же таблица, те же колонки
+     * и снова без аргументов.
+     *
+     * Модели над pivot-строкой (using(...), как у лайков) нет: событий
+     * на «профиль добавлен в чат» не нужно.
+     */
+    public function chats(): BelongsToMany {
+        return $this->belongsToMany(Chat::class)->withTimestamps();
+    }
+
+    /**
      * Комментарии к постам этого профиля (Profile → Post → Comment).
      *
      * Отличается от comments() выше: тот метод — это комментарии, которые
