@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Notification\NotificationResource;
 use App\Http\Resources\Post\PostResource;
 use App\Http\Resources\Profile\ProfileResource;
 use App\Models\Post;
@@ -129,5 +130,43 @@ class ProfileController extends Controller {
         return [
             'is_subscribed' => $changes['attached'] !== [],
         ];
+    }
+
+    /**
+     * Уведомления текущего пользователя.
+     *
+     * Возвращает массив, а не Inertia-страницу: за списком ходит axios из шапки,
+     * страница при этом остаётся на месте. Тот же приём, что у списка комментариев.
+     *
+     * Пагинации нет намеренно: попап показывает последние два десятка, «всю историю
+     * уведомлений» задание не требует. limit() вместо paginate() — честнее, чем
+     * пагинатор, чьи links и meta никто не прочитает.
+     *
+     * Прочитанными строки помечает NotificationObserver в момент их выборки
+     * из базы — здесь про это нет ни строчки, и в этом главный минус выбранного
+     * в уроке подхода: метод выглядит читающим, а меняет данные.
+     *
+     * Двадцать — это и предел показа, и предел «прочтения»: пометить можно только
+     * то, что человек увидел. Если непрочитанных больше, остаток останется
+     * на колокольчике.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function indexNotification(Request $request): array {
+        $profile = $request->user()->profile;
+
+        abort_if($profile === null, 404);
+
+        $notifications = $profile->notifications()
+            // Источник нужен ресурсу, чтобы построить ссылку. Без with() двадцать
+            // уведомлений дали бы двадцать лишних запросов (N+1) — при полиморфной
+            // связи Eloquent сгруппирует их по типу и сделает по одному на тип.
+            ->with('notificationable')
+            ->latest('id')
+            ->limit(20)
+            ->get();
+
+        // resolve(), а не response(): клиенту нужен плоский массив, без обёртки data.
+        return NotificationResource::collection($notifications)->resolve();
     }
 }

@@ -27,6 +27,15 @@ Route::middleware('auth')->group(function () {
         ->whereNumber('profile')
         ->name('client.profiles.show');
 
+    // Уведомления текущего пользователя. Адрес без id — как у profiles/personal:
+    // чьи уведомления показывать, сервер знает из сессии. Просить их «по номеру
+    // профиля» было бы приглашением подставить чужой номер.
+    //
+    // Порядок относительно profiles/{profile} роли не играет: на том маршруте
+    // стоит whereNumber(), и слово notifications в параметр не попадёт.
+    Route::get('profiles/notifications', [ProfileController::class, 'indexNotification'])
+        ->name('client.profiles.notifications.index');
+
     // Переключение подписки. Форма ровно та же, что у лайка: POST на «подписчиков»
     // профиля, а глагол toggle живёт в имени маршрута, а не в адресе.
     //

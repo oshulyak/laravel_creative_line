@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Traits\HasLog;
 use Database\Factories\ProfileFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -61,23 +62,33 @@ class Profile extends Model {
 
     /**
      * Публикации, которые лайкнул профиль (Likeable: многие ко многим через likeables).
+     *
+     * using(Like::class) — как и на обратной стороне связи: pivot-строка получает
+     * модель, а модель — события. Здесь лайки обычно только читают, но связь
+     * должна вести себя одинаково с какой стороны к ней ни подойти.
      */
     public function likedPosts(): MorphToMany {
-        return $this->morphedByMany(Post::class, 'likeable')->withTimestamps();
+        return $this->morphedByMany(Post::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
     }
 
     /**
      * Комментарии, которые лайкнул профиль (Likeable: многие ко многим через likeables).
      */
     public function likedComments(): MorphToMany {
-        return $this->morphedByMany(Comment::class, 'likeable')->withTimestamps();
+        return $this->morphedByMany(Comment::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
     }
 
     /**
      * Изображения, которые лайкнул профиль (Likeable: многие ко многим через likeables).
      */
     public function likedImages(): MorphToMany {
-        return $this->morphedByMany(Image::class, 'likeable')->withTimestamps();
+        return $this->morphedByMany(Image::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
     }
 
     /**
@@ -137,5 +148,43 @@ class Profile extends Model {
     public function postComments(): HasManyThrough {
         return $this->hasManyThrough(Comment::class, Post::class, 'author_id', 'commentable_id')
             ->where('comments.commentable_type', Post::class);
+    }
+
+    /**
+     * Уведомления, адресованные этому профилю (внешний ключ app_notifications.profile_id).
+     *
+     * Обычный hasMany: имя колонки Laravel выведет из имени модели Profile,
+     * указывать его не нужно — в отличие от posts() и comments(), где ключ
+     * называется author_id.
+     */
+    public function notifications(): HasMany {
+        return $this->hasMany(Notification::class);
+    }
+
+    /**
+     * Количество НЕпрочитанных уведомлений профиля.
+     *
+     * Аксессор в новом стиле — так же, как is_admin у User: метод называется
+     * notificationsCount(), а обращаться к нему нужно как к атрибуту
+     * $profile->notifications_count (имя приводится к snake_case).
+     *
+     * notifications() со скобками, а не notifications: со скобками это запрос,
+     * и в базу уходит SELECT COUNT(*) — одно число. Без скобок Eloquent вытащил бы
+     * ВСЕ строки уведомлений в память, а заодно поднял бы на каждой из них событие
+     * retrieved — и NotificationObserver пометил бы их прочитанными. Счётчик
+     * обнулял бы сам себя при открытии любой страницы.
+     *
+     * $value — значение, которое уже лежит в модели под этим именем: его кладёт
+     * туда withCount('notifications as notifications_count'). Аксессор вызывается
+     * раньше всего остального и перекрывает загруженное значение, поэтому без этой
+     * проверки withCount не давал бы никакой экономии. Приведение к int нужно,
+     * потому что COUNT(*) в PostgreSQL приезжает строкой.
+     */
+    protected function notificationsCount(): Attribute {
+        return Attribute::make(
+            get: fn (mixed $value): int => $value !== null
+                ? (int) $value
+                : $this->notifications()->whereNull('read_at')->count(),
+        );
     }
 }

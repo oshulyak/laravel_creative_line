@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Models\Traits\HasFilter;
 use App\Models\Traits\HasLog;
+use App\Observers\PostObserver;
 use Database\Factories\PostFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
+#[ObservedBy(PostObserver::class)]
 class Post extends Model {
     /** @use HasFactory<PostFactory> */
     use HasFactory, HasFilter, HasLog;
@@ -129,8 +132,23 @@ class Post extends Model {
 
     /**
      * Профили, лайкнувшие публикацию (Likeable: многие ко многим через likeables).
+     *
+     * using(Like::class) — не украшение: без него attach() пишет строку в pivot
+     * прямым запросом, и события модели не поднимаются. С ним Laravel создаёт
+     * объект Like и зовёт save(), а значит срабатывает LikeObserver и автор
+     * публикации получает уведомление.
      */
     public function likedByProfiles(): MorphToMany {
-        return $this->morphToMany(Profile::class, 'likeable')->withTimestamps();
+        return $this->morphToMany(Profile::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
+    }
+
+    /**
+     * Уведомления, порождённые этой публикацией: репосты и лайки
+     * (Notificationable: одно ко многим).
+     */
+    public function notifications(): MorphMany {
+        return $this->morphMany(Notification::class, 'notificationable');
     }
 }

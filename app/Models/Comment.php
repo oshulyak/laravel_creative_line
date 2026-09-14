@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Models\Traits\HasLog;
+use App\Observers\CommentObserver;
 use Database\Factories\CommentFactory;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
+#[ObservedBy(CommentObserver::class)]
 class Comment extends Model {
     /** @use HasFactory<CommentFactory> */
     use HasFactory, HasLog;
@@ -96,8 +99,21 @@ class Comment extends Model {
 
     /**
      * Профили, лайкнувшие комментарий (Likeable: многие ко многим через likeables).
+     *
+     * using(Like::class) даёт pivot-строке модель, а модели — события: без него
+     * лайк комментария проходил бы мимо LikeObserver. См. Post::likedByProfiles().
      */
     public function likedByProfiles(): MorphToMany {
-        return $this->morphToMany(Profile::class, 'likeable')->withTimestamps();
+        return $this->morphToMany(Profile::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
+    }
+
+    /**
+     * Уведомления, порождённые этим комментарием: сам комментарий и его лайки
+     * (Notificationable: одно ко многим).
+     */
+    public function notifications(): MorphMany {
+        return $this->morphMany(Notification::class, 'notificationable');
     }
 }

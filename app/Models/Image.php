@@ -38,8 +38,14 @@ class Image extends Model {
 
     /**
      * Профили, лайкнувшие изображение (Likeable: многие ко многим через likeables).
+     *
+     * using(Like::class) стоит и здесь — ради единообразия всех трёх лайкаемых
+     * сущностей. Уведомления лайк картинки не породит: у Image нет автора-профиля,
+     * и LikeObserver такой лайк пропускает.
      */
     public function likedByProfiles(): MorphToMany {
-        return $this->morphToMany(Profile::class, 'likeable')->withTimestamps();
+        return $this->morphToMany(Profile::class, 'likeable')
+            ->using(Like::class)
+            ->withTimestamps();
     }
 }
