@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Client;
 
+use App\Events\WS\SendMessageEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Client\Message\StoreRequest;
 use App\Http\Resources\Message\MessageResource;
@@ -41,15 +42,23 @@ class ChatController extends Controller {
      *
      * Возвращает JSON, а не редирект: форма отправляет запрос через axios,
      * страница остаётся на месте, а новое сообщение дописывается в ленту.
+     *
+     * Отправитель получает сообщение ответом на запрос, остальные
+     * участники — событием через веб-сокет.
      */
     public function storeMessage(StoreRequest $request, Chat $chat): JsonResponse {
         // create() на связи hasMany сам заполнит chat_id,
         // author_id и content пришли из validated().
         $message = $chat->messages()->create($request->validated());
 
-        // Ник автора клиенту нужен сразу: сообщение встанет в ленту
-        // без перезагрузки, и подпись под ним должна быть полной.
+        // Ник автора нужен и ответу, и событию: оба отдают сообщение через
+        // MessageResource. Поэтому load() стоит раньше broadcast().
         $message->load('author');
+
+        // toOthers(): всем подписчикам канала, кроме вкладки, из которой пришёл
+        // запрос (её узнают по заголовку X-Socket-ID). Она получит сообщение
+        // ответом ниже, и копия из канала встала бы в её ленту второй раз.
+        broadcast(new SendMessageEvent($message))->toOthers();
 
         // 201 Created и само сообщение в теле — как у комментария.
         // resolve() — плоский объект без обёртки data.

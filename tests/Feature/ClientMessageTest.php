@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Events\WS\SendMessageEvent;
 use App\Models\Chat;
 use App\Models\Message;
 use App\Models\Profile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class ClientMessageTest extends TestCase {
@@ -118,5 +121,59 @@ class ClientMessageTest extends TestCase {
                 // Ник пришёл — значит, маппер загрузил автора.
                 ->where('messages.0.author.nickname', $companion->nickname)
                 ->etc());
+    }
+
+    public function test_sent_message_is_broadcast_to_other_participants(): void {
+        $viewer = Profile::factory()->create();
+        $companion = Profile::factory()->create();
+
+        $chat = Chat::factory()->create();
+        $chat->profiles()->attach([$viewer->id, $companion->id]);
+
+        // Подменяем только это событие: всё остальное работает по-настоящему.
+        Event::fake([SendMessageEvent::class]);
+
+        $this->actingAs($viewer->user)
+            // В браузере этот заголовок добавляет Echo. По нему toOthers()
+            // запоминает, какой вкладке событие не отправлять.
+            ->withHeader('X-Socket-ID', '1234.5678')
+            ->postJson(route('client.chats.messages.store', $chat), [
+                'content' => 'Привет!',
+            ])
+            ->assertCreated();
+
+        Event::assertDispatched(SendMessageEvent::class, function (SendMessageEvent $event) use ($chat, $viewer): bool {
+            // Канал именно этого чата: ошибка в имени — и собеседник ничего не получит.
+            $this->assertSame('private-chats.'.$chat->id.'.messages', $event->broadcastOn()[0]->name);
+
+            // Вкладка отправителя исключена. Без toOthers() здесь был бы null,
+            // и сообщение встало бы в её ленту дважды.
+            $this->assertSame('1234.5678', $event->socket);
+
+            // В данных — сообщение с автором: load('author') стоит раньше broadcast().
+            $message = $event->broadcastWith()['message'];
+            $this->assertSame('Привет!', $message['content']);
+            $this->assertSame($viewer->nickname, $message['author']['nickname']);
+
+            return true;
+        });
+    }
+
+    /**
+     * Правило вызываем напрямую, а не запросом на /broadcasting/auth:
+     * в тестах BROADCAST_CONNECTION=null (phpunit.xml), а драйвер null пускает
+     * в любой канал кого угодно — HTTP-тест был бы зелёным при любом правиле.
+     */
+    public function test_only_participants_can_listen_to_chat_channel(): void {
+        $viewer = Profile::factory()->create();
+
+        $chat = Chat::factory()->create();
+        $chat->profiles()->attach([$viewer->id, Profile::factory()->create()->id]);
+
+        // Правила из routes/channels.php хранятся по шаблону имени канала.
+        $canListen = Broadcast::driver()->getChannels()->get('chats.{chat}.messages');
+
+        $this->assertTrue($canListen($viewer->user, $chat));
+        $this->assertFalse($canListen(Profile::factory()->create()->user, $chat));
     }
 }

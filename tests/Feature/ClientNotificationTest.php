@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Events\WS\SendNotificationEvent;
 use App\Models\Comment;
 use App\Models\Notification;
 use App\Models\Post;
 use App\Models\Profile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class ClientNotificationTest extends TestCase {
@@ -157,5 +160,40 @@ class ClientNotificationTest extends TestCase {
             'id' => $foreign->id,
             'read_at' => null,
         ]);
+    }
+
+    public function test_new_notification_is_broadcast_to_recipient(): void {
+        $post = Post::factory()->create(['status' => Post::STATUS_PUBLISHED]);
+        $profile = Profile::factory()->create();
+
+        Event::fake([SendNotificationEvent::class]);
+
+        $this->actingAs($profile->user)
+            ->postJson(route('client.posts.likes.toggle', $post))
+            ->assertOk();
+
+        Event::assertDispatched(SendNotificationEvent::class, function (SendNotificationEvent $event) use ($post): bool {
+            // Канал АВТОРА поста, а не того, кто лайкнул: перепутать profile_id
+            // и actor_id — самая вероятная ошибка в этом событии.
+            $this->assertSame('private-profiles.'.$post->author_id.'.notifications', $event->broadcastOn()[0]->name);
+
+            // Число уже учитывает новое уведомление: событие отправлено после
+            // вставки строки.
+            $this->assertSame(1, $event->broadcastWith()['notifications_count']);
+
+            return true;
+        });
+    }
+
+    /**
+     * Правило вызываем напрямую — почему, см. ClientMessageTest.
+     */
+    public function test_only_owner_can_listen_to_notifications_channel(): void {
+        $owner = Profile::factory()->create();
+
+        $canListen = Broadcast::driver()->getChannels()->get('profiles.{profile}.notifications');
+
+        $this->assertTrue($canListen($owner->user, $owner));
+        $this->assertFalse($canListen(Profile::factory()->create()->user, $owner));
     }
 }

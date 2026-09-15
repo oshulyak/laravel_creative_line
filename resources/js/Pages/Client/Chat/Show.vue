@@ -65,6 +65,7 @@
 <script>
 import axios from 'axios';
 import { Head, Link } from '@inertiajs/vue3';
+import { echo } from '@laravel/echo-vue';
 import ItemMessage from '@/Components/Message/ItemMessage.vue';
 import ClientLayout from '@/Layouts/ClientLayout.vue';
 
@@ -98,6 +99,46 @@ export default {
             error: '',
             isSending: false,
         };
+    },
+    computed: {
+        /**
+         * Канал этого чата. Имя совпадает с broadcastOn() в SendMessageEvent,
+         * только без префикса private-: его добавит echo().private().
+         */
+        messagesChannel() {
+            return `chats.${this.chat.id}.messages`;
+        },
+    },
+    /**
+     * Подписка на новые сообщения, пока страница чата открыта.
+     *
+     * private(), а не channel(): канал приватный, и Echo сначала спросит
+     * разрешение у /broadcasting/auth.
+     */
+    created() {
+        echo()
+            .private(this.messagesChannel)
+            // Точка в начале: имя задано в broadcastAs(), и подставлять
+            // перед ним App.Events не нужно.
+            .listen('.message.created', (e) => {
+                // e — то, что вернул broadcastWith(): { message: {...} }.
+                // Та же форма, что у res.data в storeMessage(), поэтому
+                // сообщение встаёт в ту же ленту и рисуется тем же ItemMessage.
+                this.chatMessages.push(e.message);
+            });
+    },
+    /**
+     * Отписка при уходе со страницы.
+     *
+     * Echo живёт, пока открыта вкладка, и об уходе со страницы сам не узнает.
+     * Без leave() браузер продолжит получать сообщения чата на любой другой
+     * странице, а каждое возвращение в чат добавит ещё один обработчик.
+     *
+     * beforeUnmount — последний момент, когда компонент целиком на месте:
+     * отписываемся раньше, чем начнёт работу следующая страница.
+     */
+    beforeUnmount() {
+        echo().leave(this.messagesChannel);
     },
     methods: {
         storeMessage() {

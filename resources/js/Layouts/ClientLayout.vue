@@ -129,6 +129,7 @@
 import axios from 'axios';
 // Именованный импорт: из библиотеки берём только то, что нужно.
 import { Link, router } from '@inertiajs/vue3';
+import { echo } from '@laravel/echo-vue';
 
 export default {
     name: 'ClientLayout',
@@ -138,6 +139,11 @@ export default {
             isPopupShown: false,
             isLoading: false,
             notifications: [],
+            // Имя канала уведомлений запоминаем при создании раскладки.
+            // К моменту beforeUnmount() общие пропсы уже принадлежат новой
+            // странице: например, после выхода auth.user станет null,
+            // и вычислить имя канала заново не получится.
+            notificationsChannel: null,
         };
     },
     computed: {
@@ -146,6 +152,44 @@ export default {
         unreadCount() {
             return this.$page.props.auth.user.profile?.notifications_count ?? 0;
         },
+    },
+    /**
+     * Подписка на новые уведомления текущего профиля.
+     *
+     * Подписка в раскладке, а не на странице: колокольчик есть на каждой
+     * странице клиентской части, а раскладка переживает переходы между ними.
+     * Значит, одна подписка работает всё время, пока пользователь здесь.
+     */
+    created() {
+        const profileId = this.$page.props.auth.user.profile?.id;
+
+        // Без профиля уведомлений не бывает: слушать нечего.
+        if (!profileId) {
+            return;
+        }
+
+        this.notificationsChannel = `profiles.${profileId}.notifications`;
+
+        echo()
+            .private(this.notificationsChannel)
+            .listen('.notification.created', (e) => {
+                // Число уже посчитано на сервере. replaceProp() подставляет его
+                // в общий проп без запроса, и unreadCount пересчитается сам.
+                //
+                // Не router.reload(): число уже пришло в событии, а reload
+                // отправил бы запрос, и контроллер текущей страницы (лента, чат)
+                // заново выполнил бы все свои запросы к базе.
+                router.replaceProp('auth.user.profile.notifications_count', e.notifications_count);
+            });
+    },
+    /**
+     * Отписка, когда раскладка исчезает: пользователь вышел или перешёл
+     * на страницу с другой раскладкой.
+     */
+    beforeUnmount() {
+        if (this.notificationsChannel) {
+            echo().leave(this.notificationsChannel);
+        }
     },
     methods: {
         // Клик по колокольчику: закрыть, если открыт; открыть и загрузить, если закрыт.
