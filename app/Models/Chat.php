@@ -11,6 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Чат: переписка, к которой присоединены профили-участники.
  *
+ * Чаты бывают двух видов, и различаются они по title:
+ * - диалог — два участника, title = NULL (заголовок из ника собеседника
+ *   собирает ChatResource);
+ * - групповой — title обязателен, его проверяет Client\Chat\StoreRequest.
+ *
+ * Поиск диалога в ChatService::storeDialog() опирается на это правило.
+ *
  * HasLog не подключён, как и у Notification: логировать каждый чат незачем.
  */
 class Chat extends Model {

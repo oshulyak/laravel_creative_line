@@ -4,15 +4,31 @@ namespace App\Http\Controllers\Client;
 
 use App\Events\WS\SendMessageEvent;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Client\Message\StoreRequest;
+use App\Http\Requests\Client\Chat\StoreRequest as StoreChatRequest;
+use App\Http\Requests\Client\Message\StoreRequest as StoreMessageRequest;
 use App\Http\Resources\Message\MessageResource;
 use App\Mappers\ChatMapper;
 use App\Models\Chat;
+use App\Services\ChatService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
 
 class ChatController extends Controller {
+    /**
+     * Список чатов текущего пользователя: и диалоги, и групповые.
+     */
+    public function index(Request $request): Response {
+        $profile = $request->user()->profile;
+
+        // Без профиля чатов не бывает. 404 — как у «Моих публикаций»:
+        // такой страницы у этого пользователя просто нет.
+        abort_if($profile === null, 404);
+
+        return inertia('Client/Chat/Index', ChatMapper::index($profile));
+    }
+
     /**
      * Страница чата.
      *
@@ -35,9 +51,24 @@ class ChatController extends Controller {
     }
 
     /**
+     * Создание группового чата.
+     *
+     * Создатель уже в members, название проверено: всё это сделал
+     * StoreChatRequest. Контроллеру остаётся вызвать сервис и ответить.
+     *
+     * Редирект, а не JSON: форму отправляет router.post() из Inertia,
+     * и по редиректу она сама откроет страницу нового чата.
+     */
+    public function store(StoreChatRequest $request): RedirectResponse {
+        $chat = ChatService::storeGroup($request->validated());
+
+        return redirect()->route('client.chats.show', $chat);
+    }
+
+    /**
      * Отправка сообщения в чат.
      *
-     * Проверки доступа здесь нет: участие проверил StoreRequest::authorize(),
+     * Проверки доступа здесь нет: участие проверил StoreMessageRequest::authorize(),
      * посторонний до этого метода не дойдёт.
      *
      * Возвращает JSON, а не редирект: форма отправляет запрос через axios,
@@ -46,7 +77,7 @@ class ChatController extends Controller {
      * Отправитель получает сообщение ответом на запрос, остальные
      * участники — событием через веб-сокет.
      */
-    public function storeMessage(StoreRequest $request, Chat $chat): JsonResponse {
+    public function storeMessage(StoreMessageRequest $request, Chat $chat): JsonResponse {
         // create() на связи hasMany сам заполнит chat_id,
         // author_id и content пришли из validated().
         $message = $chat->messages()->create($request->validated());

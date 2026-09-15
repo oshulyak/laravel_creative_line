@@ -15,6 +15,14 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->group(function () {
     Route::get('feed', [FeedController::class, 'index'])->name('client.feed.index');
 
+    // Поиск профилей для окна «Добавить участника». Отдаёт JSON для axios,
+    // а не страницу — как client.profiles.notifications.index.
+    //
+    // Параметр поиска приходит в строке запроса: /profiles?search=ivan.
+    // С profiles/{profile} адрес не пересекается: там после profiles/ есть сегмент.
+    Route::get('profiles', [ProfileController::class, 'index'])
+        ->name('client.profiles.index');
+
     // Страница «мои публикации». Слово personal — не id профиля, а фиксированный сегмент:
     // чей профиль показывать, сервер знает из сессии, а не из URL. Чужие профили
     // открываются маршрутом profiles/{profile} ниже.
@@ -55,6 +63,19 @@ Route::middleware('auth')->group(function () {
     Route::post('profiles/{profile}/chats', [ProfileController::class, 'storeChat'])
         ->whereNumber('profile')
         ->name('client.profiles.chats.store');
+
+    // Список чатов текущего пользователя. Адрес без id — как у profiles/personal:
+    // чьи чаты показывать, сервер знает из сессии.
+    Route::get('chats', [ChatController::class, 'index'])
+        ->name('client.chats.index');
+
+    // Создание группового чата. Тот же адрес, другой глагол — стандартная
+    // пара index/store: GET читает список, POST добавляет в него запись.
+    //
+    // Диалоги по-прежнему создаёт client.profiles.chats.store: у диалога
+    // есть «с кем», и этот профиль живёт в адресе.
+    Route::post('chats', [ChatController::class, 'store'])
+        ->name('client.chats.store');
 
     // Страница чата. Адрес НЕ вложен в профиль: у чата свой id и несколько
     // участников, «чей» это чат, из адреса не скажешь. Тот же довод,

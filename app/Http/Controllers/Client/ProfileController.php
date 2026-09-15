@@ -6,16 +6,60 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Notification\NotificationResource;
 use App\Http\Resources\Post\PostResource;
 use App\Http\Resources\Profile\ProfileResource;
-use App\Models\Chat;
+use App\Http\Resources\Profile\ProfileSummaryResource;
 use App\Models\Post;
 use App\Models\Profile;
+use App\Services\ChatService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Response;
 
 class ProfileController extends Controller {
+    /**
+     * Поиск профилей для окна «Добавить участника».
+     *
+     * Возвращает массив, а не Inertia-страницу: список запрашивает axios
+     * из модального окна, страница чатов остаётся на месте. Тот же приём,
+     * что у indexNotification().
+     *
+     * ProfileSummaryResource, а не ProfileResource: окну нужны только id и ник,
+     * а can_subscribe и can_message, которые считаются для смотрящего, здесь лишние.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function index(Request $request): array {
+        $viewer = $request->user()->profile;
+
+        // Без профиля чат не создать, и искать участников незачем.
+        abort_if($viewer === null, 403, 'У пользователя нет профиля.');
+
+        // string() возвращает строку-обёртку даже без параметра: ?search= не пришёл —
+        // будет пустая строка. trim(): пробелы по краям — не часть ника.
+        $search = $request->string('search')->trim()->toString();
+
+        // Поиск на сервере, а не фильтр в браузере: при каждом открытии окна
+        // тянуть к клиенту всю таблицу профилей незачем.
+        $profiles = Profile::query()
+            // Себя в списке нет: создателя в участники дописывает StoreRequest.
+            ->whereKeyNot($viewer->id)
+            // when(): условие добавляется, только если первый аргумент истинный.
+            // Пустой поиск — просто первые профили по алфавиту.
+            //
+            // whereLike() по умолчанию не различает регистр: «anna» найдёт и «Anna».
+            // Синтаксис Laravel подбирает под базу: на PostgreSQL это ilike,
+            // на SQLite, где идут тесты, — like. Написанный руками 'ilike'
+            // (как в PostFilter) в тестах упал бы с синтаксической ошибкой.
+            ->when($search !== '', fn (Builder $query) => $query->whereLike('nickname', "%{$search}%"))
+            ->orderBy('nickname')
+            // Окну нужно столько, сколько человек просмотрит глазами.
+            // Кого нет в первых двадцати, находят уточнением поиска.
+            ->limit(20)
+            ->get();
+
+        return ProfileSummaryResource::collection($profiles)->resolve();
+    }
+
     /**
      * Личная страница: профиль и лента собственных публикаций.
      *
@@ -136,11 +180,10 @@ class ProfileController extends Controller {
     }
 
     /**
-     * Кнопка «Написать»: открыть чат с этим профилем.
+     * Кнопка «Написать»: открыть диалог с этим профилем.
      *
-     * Чат уже есть — ведём в него, нет — создаём и ведём в новый. Кнопка одна
-     * на оба случая: был ли у пользователя диалог с этим человеком, решает
-     * сервер, а не интерфейс.
+     * Диалог уже есть — ведём в него, нет — создаём и ведём в новый.
+     * Найти или создать — забота ChatService, здесь только проверки и ответ.
      *
      * Возвращает редирект, а не массив: запрос отправляет Inertia-ссылка,
      * и по редиректу она сама откроет страницу чата.
@@ -148,36 +191,13 @@ class ProfileController extends Controller {
     public function storeChat(Request $request, Profile $profile): RedirectResponse {
         $viewer = $request->user()->profile;
 
-        // Те же две проверки, что в toggleSubscribe(): без профиля участвовать
-        // в чате некому, а чат с самим собой не нужен. Скрытая кнопка
-        // от POST-запроса руками не защищает.
+        // Проверки остаются в контроллере: это ответы HTTP (403),
+        // а сервис про HTTP не знает. Скрытая кнопка от POST-запроса
+        // руками не защищает.
         abort_if($viewer === null, 403, 'У пользователя нет профиля.');
         abort_if($viewer->id === $profile->id, 403, 'Нельзя написать самому себе.');
 
-        // «Среди МОИХ чатов — тот, в котором участвует ОН».
-        // chats() сужает выборку до чатов смотрящего, whereHas() оставляет
-        // только те, где среди участников есть второй профиль.
-        //
-        // Не firstOrCreate(): он ищет по колонкам одной таблицы, а условие
-        // «чат, где участвуют эти двое» лежит в chat_profile.
-        $chat = $viewer->chats()
-            ->whereHas('profiles', fn (Builder $query) => $query->whereKey($profile->id))
-            ->first();
-
-        if ($chat === null) {
-            // Чат и его участники — вставки в две разные таблицы. Если вторая
-            // упадёт, без транзакции в базе останется чат без участников:
-            // его не найдёт ни поиск выше, ни страница чата. Транзакция
-            // откатит обе вставки разом — как в PostService.
-            $chat = DB::transaction(function () use ($viewer, $profile): Chat {
-                $chat = Chat::create();
-
-                // attach() с массивом id — один INSERT на обе строки chat_profile.
-                $chat->profiles()->attach([$viewer->id, $profile->id]);
-
-                return $chat;
-            });
-        }
+        $chat = ChatService::storeDialog($viewer, $profile);
 
         // В route() передаём модель, а не $chat->id: Laravel сам возьмёт ключ.
         return redirect()->route('client.chats.show', $chat);

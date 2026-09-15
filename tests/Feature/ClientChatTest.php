@@ -65,6 +65,26 @@ class ClientChatTest extends TestCase {
         $this->assertDatabaseHas('chat_profile', ['profile_id' => $author->id]);
     }
 
+    /**
+     * С групповыми чатами «мой чат, где есть он» может оказаться общим.
+     * «Написать» должна вести в личный диалог, а не туда.
+     */
+    public function test_message_button_does_not_reuse_group_chat(): void {
+        $viewer = Profile::factory()->create();
+        $author = Profile::factory()->create();
+
+        $groupChat = Chat::factory()->create(['title' => 'Работа']);
+        $groupChat->profiles()->attach([$viewer->id, $author->id]);
+
+        $response = $this->actingAs($viewer->user)
+            ->post(route('client.profiles.chats.store', $author));
+
+        // Появился новый чат без названия — диалог, и редирект ведёт в него.
+        $dialog = Chat::query()->whereNull('title')->sole();
+
+        $response->assertRedirect(route('client.chats.show', $dialog));
+    }
+
     public function test_user_cannot_start_chat_with_himself(): void {
         $profile = Profile::factory()->create();
 

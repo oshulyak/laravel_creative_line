@@ -9,12 +9,13 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ChatResource extends JsonResource {
     /**
-     * Чат для страницы чата: заголовок и участники.
+     * Чат для страницы чата и для списка чатов: заголовок и участники.
      *
      * Ресурс рассчитан на загруженную связь profiles: из участников собирается
      * заголовок, поэтому whenLoaded() здесь не нужен — без участников чат
-     * показать нельзя. К моменту работы ресурса участники уже в памяти:
-     * их прочитал Chat::hasParticipant() при проверке доступа в show().
+     * показать нельзя. На странице чата участников уже прочитал
+     * Chat::hasParticipant(), в списке их загружает with('profiles')
+     * в ChatMapper::index().
      *
      * @return array<string, mixed>
      */

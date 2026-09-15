@@ -24,6 +24,18 @@
                 </Link>
 
                 <!--
+                    client.chats.* — звёздочка в Ziggy: пункт подсвечен и на списке
+                    чатов (client.chats.index), и внутри любого чата (client.chats.show).
+                -->
+                <Link
+                    :href="route('client.chats.index')"
+                    class="text-sm font-semibold hover:text-sky-700"
+                    :class="route().current('client.chats.*') ? 'text-sky-700' : 'text-gray-900'"
+                >
+                    Чаты
+                </Link>
+
+                <!--
                     relative на обёртке — точка отсчёта для absolute-позиционирования
                     и счётчика, и выпадающего списка. Без неё попап уедет
                     относительно всей страницы.

@@ -5,18 +5,40 @@ namespace App\Mappers;
 use App\Http\Resources\Chat\ChatResource;
 use App\Http\Resources\Message\MessageResource;
 use App\Models\Chat;
+use App\Models\Profile;
 
 /**
  * Пропсы страниц чата.
  *
  * Маппер собирает всё, из чего состоит страница, чтобы этим не занимался
- * контроллер. Один публичный метод на одну страницу: show() — страница
- * Client/Chat/Show. Когда появится список чатов, рядом встанет index().
+ * контроллер. Один публичный метод на одну страницу: index() — Client/Chat/Index,
+ * show() — Client/Chat/Show.
  *
  * Методы статические: состояния и зависимостей у маппера нет, как
  * у PostService.
  */
 class ChatMapper {
+    /**
+     * Пропсы страницы списка чатов.
+     *
+     * Список без пагинации — осознанное упрощение, как и лента сообщений в show().
+     *
+     * @return array{chats: array<int, array<string, mixed>>}
+     */
+    public static function index(Profile $profile): array {
+        $chats = $profile->chats()
+            // Заголовок диалога ChatResource собирает из участников.
+            // Без with() на каждый чат ушёл бы отдельный запрос за профилями (N+1).
+            ->with('profiles')
+            // Новые чаты сверху. По id, а не по дате: id строго возрастает.
+            ->latest('id')
+            ->get();
+
+        return [
+            'chats' => ChatResource::collection($chats)->resolve(),
+        ];
+    }
+
     /**
      * Пропсы страницы чата: сам чат и его сообщения.
      *
