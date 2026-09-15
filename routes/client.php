@@ -3,8 +3,10 @@
 use App\Http\Controllers\Client\ChatController;
 use App\Http\Controllers\Client\CommentController;
 use App\Http\Controllers\Client\FeedController;
+use App\Http\Controllers\Client\GroupController;
 use App\Http\Controllers\Client\PostController;
 use App\Http\Controllers\Client\ProfileController;
+use App\Http\Controllers\Client\ThemeController;
 use Illuminate\Support\Facades\Route;
 
 // Файл подключается в bootstrap/app.php через then: и уже обёрнут в группу web.
@@ -93,6 +95,52 @@ Route::middleware('auth')->group(function () {
     Route::post('chats/{chat}/messages', [ChatController::class, 'storeMessage'])
         ->whereNumber('chat')
         ->name('client.chats.messages.store');
+
+    // Каталог групп: все группы, а не только мои. Отсюда пользователь
+    // находит группу, чтобы вступить в неё.
+    Route::get('groups', [GroupController::class, 'index'])
+        ->name('client.groups.index');
+
+    // Создание группы. Тот же адрес, другой глагол — пара index/store, как у chats.
+    Route::post('groups', [GroupController::class, 'store'])
+        ->name('client.groups.store');
+
+    // Страница группы: описание и темы.
+    Route::get('groups/{group}', [GroupController::class, 'show'])
+        ->whereNumber('group')
+        ->name('client.groups.show');
+
+    // Вступить в группу или выйти из неё. Форма та же, что у подписки
+    // на профиль: POST на «подписчиков», глагол toggle — в имени маршрута.
+    // Один toggle вместо пары store/destroy: состоит ли пользователь
+    // в группе прямо сейчас, решает сервер.
+    Route::post('groups/{group}/subscribers', [GroupController::class, 'toggleSubscribe'])
+        ->whereNumber('group')
+        ->name('client.groups.subscribers.toggle');
+
+    // Создание темы. Адрес вложен в группу: тема не бывает сама по себе,
+    // как сообщение чата — chats/{chat}/messages. Метод живёт в контроллере
+    // родителя, как ChatController::storeMessage().
+    //
+    // Имя параметра {group} важно: Theme\StoreRequest достаёт группу
+    // через $this->route('group').
+    Route::post('groups/{group}/themes', [GroupController::class, 'storeTheme'])
+        ->whereNumber('group')
+        ->name('client.groups.themes.store');
+
+    // Страница темы. Адрес НЕ вложен в группу: у темы свой id, и чтобы найти её,
+    // группа не нужна — тот же довод, что у chats/{chat} и comments/{comment}.
+    Route::get('themes/{theme}', [ThemeController::class, 'show'])
+        ->whereNumber('theme')
+        ->name('client.themes.show');
+
+    // Отправка сообщения в тему — близнец client.chats.messages.store.
+    //
+    // Имя параметра {theme} важно: ThemeMessage\StoreRequest достаёт тему
+    // через $this->route('theme').
+    Route::post('themes/{theme}/messages', [ThemeController::class, 'storeMessage'])
+        ->whereNumber('theme')
+        ->name('client.themes.messages.store');
 
     // whereNumber — та же защита, что в админке: сегмент ограничен регуляркой [0-9]+,
     // и маршрут перестаёт зависеть от порядка объявления.

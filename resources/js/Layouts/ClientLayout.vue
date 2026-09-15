@@ -36,6 +36,18 @@
                 </Link>
 
                 <!--
+                    Страница темы — client.themes.show, но это тоже раздел групп:
+                    подсвечиваем пункт и там.
+                -->
+                <Link
+                    :href="route('client.groups.index')"
+                    class="text-sm font-semibold hover:text-sky-700"
+                    :class="route().current('client.groups.*') || route().current('client.themes.*') ? 'text-sky-700' : 'text-gray-900'"
+                >
+                    Группы
+                </Link>
+
+                <!--
                     relative на обёртке — точка отсчёта для absolute-позиционирования
                     и счётчика, и выпадающего списка. Без неё попап уедет
                     относительно всей страницы.

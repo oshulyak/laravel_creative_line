@@ -147,6 +147,17 @@ class Profile extends Model {
     }
 
     /**
+     * Группы, в которых состоит профиль (многие ко многим через group_profile).
+     *
+     * Обратная сторона Group::subscribers(): та же таблица, без аргументов.
+     * Через эту связь пользователь вступает в группу и выходит из неё
+     * (GroupController::toggleSubscribe()).
+     */
+    public function groups(): BelongsToMany {
+        return $this->belongsToMany(Group::class)->withTimestamps();
+    }
+
+    /**
      * Комментарии к постам этого профиля (Profile → Post → Comment).
      *
      * Отличается от comments() выше: тот метод — это комментарии, которые
