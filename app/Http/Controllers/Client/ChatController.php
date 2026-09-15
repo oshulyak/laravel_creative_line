@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Chat\ChatResource;
+use App\Http\Requests\Client\Message\StoreRequest;
+use App\Http\Resources\Message\MessageResource;
+use App\Mappers\ChatMapper;
 use App\Models\Chat;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
 
@@ -16,23 +19,40 @@ class ChatController extends Controller {
      * до контроллера.
      */
     public function show(Request $request, Chat $chat): Response {
-        // Участники нужны дважды: для проверки доступа и для ресурса.
-        // Загружаем их один раз, проверка ниже идёт по готовой коллекции
-        // без отдельного запроса.
-        $chat->load('profiles');
-
-        // Чат видят только его участники: адрес /chats/5 легко набрать руками.
+        // Чат видят только участники: адрес /chats/5 легко набрать руками.
+        // У GET-страницы нет Form Request, поэтому проверка стоит здесь,
+        // до сборки пропсов.
         //
-        // 403, а не 404: номера чатов идут подряд, и скрывать сам факт
-        // существования чата незачем. Когда в курсе появятся политики, проверка
-        // переедет в ChatPolicy::view(), пока она живёт в контроллере — осознанно.
-        //
-        // Если у пользователя нет профиля, в contains() уйдёт null: среди
-        // участников он не найдётся, и ответ будет тем же 403.
-        abort_unless($chat->profiles->contains($request->user()->profile), 403);
+        // 403, а не 404 — осознанный компромисс: по разнице ответов посторонний
+        // узнает, что чат существует, но не увидит ни сообщений, ни участников.
+        // Номера чатов идут подряд, и их количество в проекте не секрет.
+        abort_unless($chat->hasParticipant($request->user()->profile), 403);
 
-        return inertia('Client/Chat/Show', [
-            'chat' => ChatResource::make($chat)->resolve(),
-        ]);
+        // Из чего состоит страница, решает маппер. Контроллер проверяет доступ
+        // и передаёт готовый набор пропсов в Inertia.
+        return inertia('Client/Chat/Show', ChatMapper::show($chat));
+    }
+
+    /**
+     * Отправка сообщения в чат.
+     *
+     * Проверки доступа здесь нет: участие проверил StoreRequest::authorize(),
+     * посторонний до этого метода не дойдёт.
+     *
+     * Возвращает JSON, а не редирект: форма отправляет запрос через axios,
+     * страница остаётся на месте, а новое сообщение дописывается в ленту.
+     */
+    public function storeMessage(StoreRequest $request, Chat $chat): JsonResponse {
+        // create() на связи hasMany сам заполнит chat_id,
+        // author_id и content пришли из validated().
+        $message = $chat->messages()->create($request->validated());
+
+        // Ник автора клиенту нужен сразу: сообщение встанет в ленту
+        // без перезагрузки, и подпись под ним должна быть полной.
+        $message->load('author');
+
+        // 201 Created и само сообщение в теле — как у комментария.
+        // resolve() — плоский объект без обёртки data.
+        return response()->json(MessageResource::make($message)->resolve(), 201);
     }
 }

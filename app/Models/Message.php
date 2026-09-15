@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use Database\Factories\MessageFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Сообщение чата.
- *
- * Фабрики пока нет: в этом уроке сообщения не создаются. Она появится
- * вместе с отправкой сообщений.
  */
 class Message extends Model {
+    /** @use HasFactory<MessageFactory> */
+    use HasFactory;
+
     /**
      * chat_id в списке нет: сообщения будут создаваться через связь
      * $chat->messages()->create([...]), и ключ чата она подставит сама.

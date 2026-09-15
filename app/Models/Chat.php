@@ -44,4 +44,21 @@ class Chat extends Model {
     public function messages(): HasMany {
         return $this->hasMany(Message::class);
     }
+
+    /**
+     * Участвует ли профиль в чате.
+     *
+     * Правило «чат доступен только участникам» записано здесь один раз,
+     * а вызывают его ChatController::show() и Message\StoreRequest::authorize().
+     * Когда в курсе появятся политики, ChatPolicy будет вызывать этот же метод.
+     *
+     * $this->profiles — без скобок: при первом обращении Eloquent загрузит
+     * участников и запомнит их на модели. В show() та же коллекция потом
+     * уйдёт в ChatResource без второго запроса.
+     *
+     * null — пользователь без профиля: участником чата он быть не может.
+     */
+    public function hasParticipant(?Profile $profile): bool {
+        return $profile !== null && $this->profiles->contains($profile);
+    }
 }

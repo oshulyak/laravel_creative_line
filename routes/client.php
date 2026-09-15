@@ -63,6 +63,16 @@ Route::middleware('auth')->group(function () {
         ->whereNumber('chat')
         ->name('client.chats.show');
 
+    // Отправка сообщения. Адрес вложен в чат: сообщение не существует само
+    // по себе, оно всегда «сообщение этого чата» — та же форма, что
+    // у posts/{post}/comments.
+    //
+    // Имя параметра {chat} важно не только для привязки модели:
+    // Message\StoreRequest::authorize() достаёт чат через $this->route('chat').
+    Route::post('chats/{chat}/messages', [ChatController::class, 'storeMessage'])
+        ->whereNumber('chat')
+        ->name('client.chats.messages.store');
+
     // whereNumber — та же защита, что в админке: сегмент ограничен регуляркой [0-9]+,
     // и маршрут перестаёт зависеть от порядка объявления.
     Route::get('posts/{post}', [PostController::class, 'show'])
