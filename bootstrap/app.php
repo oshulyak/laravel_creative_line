@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\LoggerMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Журнал запросов — в глобальный стек, а не в группу web: так он
+        // оборачивает весь запрос, включая сессию, вход и привязку моделей,
+        // и видит все их SQL. web и api получают его одинаково.
+        $middleware->append(LoggerMiddleware::class);
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

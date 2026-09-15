@@ -10,26 +10,20 @@ class EnsureUserIsAdmin {
     /**
      * Пропускает запрос дальше только для администратора.
      *
-     * Middleware стоит в цепочке после jwt.auth, поэтому токен уже проверен.
-     * Пользователя берём явно из guard 'api' (JWT), а не полагаемся на guard
-     * по умолчанию (сейчас это 'api' из .env AUTH_GUARD, см. config/auth.php) —
-     * если он когда-нибудь снова станет 'web' (например, появится сессионная
-     * админка), $request->user() без аргумента начнёт возвращать null здесь.
+     * Ставится после middleware аутентификации: auth для web-админки,
+     * auth:api для API. Оба запоминают guard, через который вошёл пользователь,
+     * и $request->user() без аргумента найдёт его и по сессии, и по JWT-токену.
      *
-     * NB: алиас 'jwt.auth' указывает на middleware из tymon/jwt-auth, помеченный
-     * @deprecated. В будущем группы маршрутов стоит перевести на штатный Laravel
-     * 'auth:api' (заменить 'jwt.auth' на 'auth:api' в routes/api.php): он
-     * аутентифицирует через тот же JWTGuard, что и user('api'), поэтому
-     * пользователь резолвится один раз из единого источника, без повторного
-     * парсинга токена.
+     * is_admin — аксессор User::isAdmin(): есть ли роль admin среди ролей
+     * пользователя. Это один запрос к roles на запрос в админку.
+     *
+     * abort(403), а не response()->json(): Laravel сам ответит страницей ошибки
+     * браузеру и JSON-ом тому, кто просит JSON (axios, API).
      *
      * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response {
-        // if (!auth()->user()->is_admin){
-        if (! $request->user('api')?->is_admin) {
-            return response()->json(['message' => 'forbidden'], Response::HTTP_FORBIDDEN);
-        }
+        abort_unless($request->user()?->is_admin, 403);
 
         return $next($request);
     }

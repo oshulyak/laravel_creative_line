@@ -31,8 +31,9 @@ class StoreRequest extends FormRequest {
 
     /**
      * Из формы приходит только content. author_id подставляет
-     * prepareForValidation(), но правило у него настоящее: значение
-     * от сервера тоже стоит проверить.
+     * prepareForValidation(), но правило у него есть: required и integer
+     * ловят опечатку в коде. exists для значения из уже загруженной модели
+     * ничего не ловит.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -41,7 +42,9 @@ class StoreRequest extends FormRequest {
             // Колонка text длину не ограничивает. 2000 — решение продукта,
             // как у комментария: поле без верхней границы — открытая дверь.
             'content' => ['required', 'string', 'max:2000'],
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // exists не нужен: id берётся из профиля, уже загруженного из базы.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
         ];
     }
 

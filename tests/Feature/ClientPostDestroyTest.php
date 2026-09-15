@@ -40,4 +40,28 @@ class ClientPostDestroyTest extends TestCase {
         // мог бы прийти уже ПОСЛЕ удаления.
         $this->assertDatabaseHas('posts', ['id' => $post->id]);
     }
+
+    public function test_feed_marks_only_own_posts_as_deletable(): void {
+        $viewer = Profile::factory()->create();
+        // Даты заданы явно: лента сортирует по published_at, и порядок
+        // карточек в ответе должен быть известен заранее.
+        $foreign = Post::factory()->create([
+            'status' => Post::STATUS_PUBLISHED,
+            'published_at' => now(),
+        ]);
+        $own = Post::factory()->for($viewer, 'author')->create([
+            'status' => Post::STATUS_PUBLISHED,
+            'published_at' => now()->subDay(),
+        ]);
+
+        $response = $this->actingAs($viewer->user)->get(route('client.feed.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Client/Feed/Index')
+            ->where('posts.data.0.id', $foreign->id)
+            ->where('posts.data.0.can_delete', false)
+            ->where('posts.data.1.id', $own->id)
+            ->where('posts.data.1.can_delete', true)
+            ->etc());
+    }
 }

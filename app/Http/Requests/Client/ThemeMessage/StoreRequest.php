@@ -29,7 +29,9 @@ class StoreRequest extends FormRequest {
         return [
             // 2000 — как у сообщений чата и комментариев.
             'content' => ['required', 'string', 'max:2000'],
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // exists не нужен: id берётся из профиля, уже загруженного из базы.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
         ];
     }
 

@@ -33,7 +33,10 @@ class StoreRequest extends FormRequest {
             // exists нужен даже при внешнем ключе: без него несуществующий id
             // дойдёт до INSERT и станет 500-й от PostgreSQL вместо 422 с сообщением.
             'category_id' => ['required', 'integer', 'exists:categories,id'],
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // А здесь exists не нужен: author_id не приходит из формы, его подставляет
+            // prepareForValidation() из профиля, уже загруженного из базы.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
             'images' => ['nullable', 'array'],
             // images.* — правило для каждого элемента массива. max для файлов считается
             // в килобайтах, то есть 2048 — это 2 МБ (в пределах лимитов php.ini).

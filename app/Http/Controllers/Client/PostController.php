@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Response;
 
 class PostController extends Controller {
@@ -27,8 +28,9 @@ class PostController extends Controller {
         // можно. 404, а не 403: существование чужого неопубликованного поста — тоже
         // информация, и подтверждать её незачем.
         //
-        // Правильное место для такого правила — PostPolicy::view(), политики идут дальше
-        // по курсу. Пока проверка живёт в контроллере, и это осознанный временный шаг.
+        // Правильное место для такого правила — PostPolicy::view(). Политика уже есть,
+        // но в уроке в неё перенесено только удаление: 404 вместо 403 потребует
+        // denyAsNotFound(), а то же правило живёт ещё и в CommentController.
         abort_unless(
             $post->status === Post::STATUS_PUBLISHED || $post->author_id === $profileId,
             404,
@@ -143,20 +145,17 @@ class PostController extends Controller {
      *
      * @see \App\Http\Controllers\Admin\PostController::destroy()
      */
-    public function destroy(Request $request, Post $post): HttpResponse {
-        // Единственное отличие от админского destroy() — проверка авторства.
+    public function destroy(Post $post): HttpResponse {
+        // Правило «удаляет только автор» живёт в PostPolicy::delete().
+        // authorize() спрашивает политику и при отказе бросает исключение,
+        // которое Laravel превращает в 403 — abort_unless() больше не нужен.
         //
-        // 403, а не 404 как в show(): существование поста уже не тайна, пользователь
-        // видел его в ленте. Скрывать нечего, отказать нужно честно.
-        //
-        // Сравниваем author_id с id ПРОФИЛЯ, а не пользователя: posts.author_id
-        // ссылается на profiles.id. Профиля может не быть — тогда ?-> даст null,
-        // сравнение с author_id (он NOT NULL) будет ложным, и получится тот же 403.
-        abort_unless($post->author_id === $request->user()->profile?->id, 403);
+        // 403, а не 404 как в show(): существование поста уже не тайна,
+        // пользователь видел его в ленте.
+        Gate::authorize('delete', $post);
 
         // Тот же сервис, что и в админке. Он снимает связи, стирает файлы картинок
-        // и двигает версию кэша списка — клиентскому контроллеру не пришлось написать
-        // ни строчки этой логики.
+        // и двигает версию кэша списка.
         PostService::destroy($post);
 
         // 204 No Content: тела у ответа нет, клиент и так знает, что удалял.

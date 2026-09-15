@@ -17,8 +17,9 @@ class StoreRequest extends FormRequest {
 
     /**
      * Из модалки приходит только title. Остальное подставляет prepareForValidation(),
-     * но правила у этих полей настоящие: значение, пришедшее от сервера, тоже стоит
-     * проверить — опечатка в коде поймается на 422, а не на 500 из базы.
+     * но правила у этих полей есть: required и формат ловят опечатку в коде на 422,
+     * а не на 500 из базы. exists для значения из уже загруженной модели (author_id)
+     * ничего не ловит, поэтому его там нет.
      *
      * Отдельный неймспейс Repost, а не Client\Post: у репоста свой контракт формы —
      * одно поле вместо картинок, тегов и категории.
@@ -35,7 +36,9 @@ class StoreRequest extends FormRequest {
             'title' => ['required', 'string', 'max:255', 'unique:posts,title'],
             'content' => ['required', 'string'],
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // exists не нужен: id берётся из профиля, уже загруженного из базы.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
             'published_at' => ['required', 'date'],
         ];
     }

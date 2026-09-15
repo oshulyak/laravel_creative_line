@@ -28,7 +28,7 @@ Route::group(['middleware' => 'jwt.auth', 'prefix' => 'auth'], function () {
     Route::post('me', [AuthController::class, 'me']);
 });
 
-// Route::group(['middleware' => ['jwt.auth', 'admin']], function () {
+// Route::group(['middleware' => ['auth:api', 'admin']], function () {
 Route::apiResource('posts', PostController::class);
 // });
 

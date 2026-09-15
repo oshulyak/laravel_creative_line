@@ -32,7 +32,9 @@ class StoreRequest extends FormRequest {
     public function rules(): array {
         return [
             'title' => ['required', 'string', 'max:255'],
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // exists не нужен: id берётся из профиля, уже загруженного из базы.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
         ];
     }
 

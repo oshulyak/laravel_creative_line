@@ -26,10 +26,16 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Админка целиком закрыта middleware auth: код внутри опирается на текущего пользователя
-// (author_id берётся из auth()->user()->profile), поэтому гость сюда попасть не должен.
+// Админка закрыта двумя middleware.
+//
+// auth — код внутри опирается на текущего пользователя (author_id берётся
+// из auth()->user()->profile), поэтому гость сюда попасть не должен.
 // Незалогиненного Authenticate редиректит на route('login') — страницу поставил Breeze.
-Route::middleware('auth')->group(function () {
+//
+// admin — вошедший пользователь без роли admin получит 403. Роль, а не политика:
+// вопрос «пускать ли в раздел» решается для всей группы сразу, а что можно делать
+// с конкретной записью, решают политики.
+Route::middleware(['auth', 'admin'])->group(function () {
     // Обычный web-маршрут, не API: страница отдаётся через web-роутинг, а Inertia сама
     // решит — отрисовать её целиком или подменить только Vue-компонент.
     // Имя admin.posts.index нужно во Vue, чтобы не хардкодить URL: route('admin.posts.index').

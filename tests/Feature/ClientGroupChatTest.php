@@ -80,7 +80,8 @@ class ClientGroupChatTest extends TestCase {
     }
 
     /**
-     * members — строка с id настоящего профиля: integer и exists она прошла бы.
+     * members — строка с id настоящего профиля: integer и проверку
+     * существования она прошла бы.
      *
      * Если prepareForValidation() приведёт её к массиву через (array), правило
      * array получит уже массив и ничего не заметит, и чат создастся. Тест
@@ -97,6 +98,22 @@ class ClientGroupChatTest extends TestCase {
             ])
             ->assertSessionHasErrors('members');
 
+        $this->assertDatabaseCount('chats', 0);
+    }
+
+    public function test_group_chat_rejects_nonexistent_member(): void {
+        $viewer = Profile::factory()->create();
+        $member = Profile::factory()->create();
+
+        $response = $this->actingAs($viewer->user)
+            ->post(route('client.chats.store'), [
+                'title' => 'Работа',
+                'members' => [$member->id, 999999],
+            ]);
+
+        $response->assertSessionHasErrors([
+            'members' => 'Среди участников есть несуществующий профиль.',
+        ]);
         $this->assertDatabaseCount('chats', 0);
     }
 

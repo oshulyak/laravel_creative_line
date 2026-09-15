@@ -18,9 +18,9 @@ class StoreRequest extends FormRequest {
 
     /**
      * Из формы приходит только content. Остальные три ключа подставляет
-     * prepareForValidation(), но правила у них такие же настоящие: значение
-     * от сервера тоже стоит проверить — опечатка в коде так поймается на 422,
-     * а не на 500 от PostgreSQL.
+     * prepareForValidation(), но правила у них есть: required и формат ловят
+     * опечатку в коде на 422, а не на 500 от PostgreSQL. exists для значения
+     * из уже загруженной модели не нужен — он ничего не ловит.
      *
      * Отдельный неймспейс Client нужен потому, что Api\Comment\StoreRequest уже есть:
      * у формы в браузере другой контракт — она автора не присылает.
@@ -33,9 +33,11 @@ class StoreRequest extends FormRequest {
             // продуктовое решение, а не отражение схемы: комментарий длиной с роман
             // никому не нужен, а поле без верхней границы — это открытая дверь.
             'content' => ['required', 'string', 'max:2000'],
-            // exists нужен даже при внешнем ключе: без него несуществующий id
-            // дойдёт до INSERT и станет 500-й вместо 422 с внятным сообщением.
-            'author_id' => ['required', 'integer', 'exists:profiles,id'],
+            // exists не нужен: author_id не приходит из формы, его подставляет
+            // prepareForValidation() из профиля, который уже загружен из базы.
+            // Проверка существования была бы лишним запросом на каждую отправку.
+            // required остаётся: у пользователя без профиля здесь null, и это 422.
+            'author_id' => ['required', 'integer'],
             'status' => ['required', 'string', Rule::in(array_keys(Comment::getStatuses()))],
             'published_at' => ['required', 'date'],
         ];

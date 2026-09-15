@@ -21,7 +21,7 @@ class AdminDashboardTest extends TestCase {
             ->sequence(fn (Sequence $sequence) => ['date' => now()->subDays($sequence->index)->toDateString()])
             ->create();
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs(User::factory()->admin()->create())
             ->get(route('admin.dashboard.index'))
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/Dashboard/Index')

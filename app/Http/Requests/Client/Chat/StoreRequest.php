@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Client\Chat;
 
+use App\Models\Profile;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreRequest extends FormRequest {
     /**
@@ -33,7 +35,39 @@ class StoreRequest extends FormRequest {
             // Правила для каждого элемента массива.
             // distinct — один профиль не попадёт в чат дважды: attach() повторы
             // не проверяет, а unique в chat_profile превратил бы их в 500.
-            'members.*' => ['integer', 'distinct', 'exists:profiles,id'],
+            //
+            // exists здесь больше нет: он делал запрос на КАЖДЫЙ элемент.
+            // Существование всех профилей проверяет after() одним запросом.
+            'members.*' => ['integer', 'distinct'],
+        ];
+    }
+
+    /**
+     * Проверки после основных правил.
+     *
+     * Все ли выбранные профили существуют — одним запросом на весь список,
+     * а не запросом на каждого участника, как делал exists в members.*.
+     *
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array {
+        return [
+            function (Validator $validator): void {
+                // Если members или его элементы уже не прошли правила, в базу
+                // не ходим: строка 'abc' в whereKey() на PostgreSQL дала бы
+                // 500 «invalid input syntax for type bigint» вместо ошибки формы.
+                if ($validator->errors()->hasAny(['members', 'members.*'])) {
+                    return;
+                }
+
+                $members = $this->input('members');
+
+                // distinct уже гарантировал, что повторов нет: сколько id пришло,
+                // столько профилей и должно найтись.
+                if (Profile::whereKey($members)->count() !== count($members)) {
+                    $validator->errors()->add('members', 'Среди участников есть несуществующий профиль.');
+                }
+            },
         ];
     }
 

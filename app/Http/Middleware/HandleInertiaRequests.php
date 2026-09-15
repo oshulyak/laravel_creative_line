@@ -35,11 +35,17 @@ class HandleInertiaRequests extends Middleware {
                 // что клиенту можно, и заодно доносит профиль со счётчиком
                 // непрочитанных уведомлений для колокольчика в шапке.
                 //
+                // fn () => — ленивое значение. share() вызывается на КАЖДОМ запросе
+                // группы web: на JSON для axios, на редиректах после форм,
+                // на /broadcasting/auth. Без замыкания профиль и COUNT уведомлений
+                // уходили бы в базу, а ответ их не отправлял. Замыкание Inertia
+                // вызовет, только когда собирает страницу.
+                //
                 // Тернарник обязателен: на странице логина и на главной пользователя
                 // нет, а AuthUserResource::make(null) отдал бы пустой объект вместо
                 // null — и проверка v-if="$page.props.auth.user" во Welcome.vue
                 // перестала бы работать.
-                'user' => $request->user()
+                'user' => fn (): ?array => $request->user()
                     ? AuthUserResource::make($request->user())->resolve()
                     : null,
             ],
