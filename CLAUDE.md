@@ -28,7 +28,7 @@
 
 - Backend: Laravel 13 на PHP 8.5 (Laragon, `php-8.5.8`); в `composer.json` объявлен минимум `"php": "^8.3"` — это нижняя граница требования, а не версия окружения. Тесты — PHPUnit, форматирование — Pint.
 - База данных: PostgreSQL (подключение `pgsql`, база `lc_line`), а не SQLite. При написании миграций и выборе типов колонок ориентироваться на PostgreSQL. Скрипт в `composer.json`, создающий `database/database.sqlite`, — рудимент скелета Laravel и в проекте не используется.
-- Frontend: Blade + Tailwind CSS 4, сборка через Vite. JS-фреймворки (Livewire, Inertia, Vue, React) на текущем этапе проекта не используются — не вводить их без явного согласования.
+- Frontend: Blade + Tailwind CSS 4, сборка через Vite, Inertia, Vue, axios.
 - Локальный запуск: вся среда (HTTP-сервер, очередь, логи Pail, Vite) поднимается одной командой `composer run dev`.
 
 ## Описание предметной области
